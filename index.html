@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acquisition Intelligence Platform — Prototype</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --card:#ffffff; --ink:#1e2a32; --muted:#687a86; --line:#e2e8ec;
+    --accent:#1f4e5f; --accent2:#2e7d94;
+    --acquire:#1e7d4f; --broker:#8a5fbf; --watch:#c98a1b; --pass:#96a3ac;
+    --acquireBg:#e7f5ee; --brokerBg:#f1eafa; --watchBg:#fdf3e0; --passBg:#eef1f3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  header{background:var(--accent);color:#fff;padding:16px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  header h1{font-size:19px;font-weight:700}
+  header .sub{font-size:12px;opacity:.75;margin-top:2px}
+  header .hbtns{display:flex;gap:8px}
+  .btn{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  .btn:hover{background:rgba(255,255,255,.25)}
+  main{max-width:1240px;margin:0 auto;padding:22px 28px 60px}
+  /* tier cards */
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;cursor:pointer;transition:box-shadow .15s;border-top:4px solid var(--muted)}
+  .card:hover{box-shadow:0 4px 14px rgba(0,0,0,.08)}
+  .card.active{outline:2px solid var(--accent2)}
+  .card .n{font-size:30px;font-weight:800}
+  .card .t{font-size:13px;font-weight:700;margin-bottom:2px}
+  .card .d{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.35}
+  .card.acquire{border-top-color:var(--acquire)} .card.acquire .t{color:var(--acquire)}
+  .card.broker{border-top-color:var(--broker)} .card.broker .t{color:var(--broker)}
+  .card.watch{border-top-color:var(--watch)} .card.watch .t{color:var(--watch)}
+  .card.pass{border-top-color:var(--pass)} .card.pass .t{color:var(--pass)}
+  /* layout */
+  .grid{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px}
+  .panel h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:14px 18px 0}
+  /* controls */
+  .controls{display:flex;gap:10px;padding:14px 18px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--line)}
+  .controls input[type=text],.controls select{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;background:#fbfcfd}
+  .controls input[type=text]{flex:1;min-width:140px}
+  /* table */
+  table{width:100%;border-collapse:collapse}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;user-select:none}
+  th:hover{color:var(--accent)}
+  td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tr.rowb{cursor:pointer}
+  tr.rowb:hover{background:#f7fafb}
+  tr.rowb.sel{background:#eef6f8}
+  .bname{font-weight:700}
+  .bsub{font-size:11.5px;color:var(--muted);margin-top:1px}
+  .pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .pill.acquire{background:var(--acquireBg);color:var(--acquire)}
+  .pill.broker{background:var(--brokerBg);color:var(--broker)}
+  .pill.watch{background:var(--watchBg);color:var(--watch)}
+  .pill.pass{background:var(--passBg);color:var(--pass)}
+  .score{font-weight:800;font-variant-numeric:tabular-nums}
+  .conf{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:10px}
+  .conf.High{background:#e7f5ee;color:#1e7d4f}.conf.Medium{background:#fdf3e0;color:#c98a1b}.conf.Low{background:#fdecec;color:#c0392b}
+  .mini{height:5px;border-radius:3px;background:#edf1f3;width:64px;overflow:hidden;margin-top:4px}
+  .mini i{display:block;height:100%;border-radius:3px;background:var(--accent2)}
+  /* right column */
+  .side .panel{margin-bottom:16px}
+  canvas{width:100%;display:block}
+  .legend{display:flex;gap:14px;font-size:11px;color:var(--muted);padding:0 18px 14px;flex-wrap:wrap}
+  .legend b{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}
+  /* thresholds */
+  .thr{padding:8px 18px 16px}
+  .thr label{display:flex;justify-content:space-between;font-size:12.5px;margin:10px 0 4px;color:var(--ink)}
+  .thr input[type=range]{width:100%}
+  .thr .hint{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.4}
+  /* detail drawer */
+  .drawer{position:fixed;top:0;right:-560px;width:540px;max-width:95vw;height:100vh;background:#fff;box-shadow:-8px 0 30px rgba(0,0,0,.16);transition:right .25s;z-index:50;overflow-y:auto}
+  .drawer.open{right:0}
+  .drawer .dhead{background:var(--accent);color:#fff;padding:20px 24px}
+  .drawer .dhead h2{font-size:19px}
+  .drawer .dhead .m{font-size:12.5px;opacity:.8;margin-top:4px}
+  .drawer .close{position:absolute;top:14px;right:16px;background:none;border:none;color:#fff;font-size:22px;cursor:pointer}
+  .dbody{padding:20px 24px 48px}
+  .facts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px}
+  .fact{background:#f7f9fa;border:1px solid var(--line);border-radius:9px;padding:9px 11px}
+  .fact .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .fact .v{font-size:14px;font-weight:700;margin-top:2px}
+  .sblock{margin-bottom:18px}
+  .sblock h4{font-size:13px;margin-bottom:8px;display:flex;justify-content:space-between}
+  .sbar{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+  .sbar .lbl{width:190px;font-size:11.5px;color:var(--muted)}
+  .sbar .track{flex:1;height:7px;background:#edf1f3;border-radius:4px;overflow:hidden}
+  .sbar .track i{display:block;height:100%;border-radius:4px}
+  .sbar .val{width:30px;text-align:right;font-size:11px;font-weight:700}
+  .ai{background:#f4f0fb;border:1px solid #e0d4f2;border-radius:10px;padding:14px 16px;margin-bottom:18px}
+  .ai h4{font-size:13px;color:#6a3fa8;margin-bottom:8px}
+  .ai li{font-size:12.5px;margin:0 0 7px 16px;line-height:1.45}
+  .next{background:#eef6f0;border:1px solid #cfe8d8;border-radius:10px;padding:12px 16px;font-size:12.5px;line-height:1.5}
+  .next b{color:var(--acquire)}
+  .notes{font-size:12.5px;color:var(--muted);font-style:italic;margin:14px 0;line-height:1.5}
+  /* weights modal */
+  .modal{position:fixed;inset:0;background:rgba(20,30,36,.5);display:none;align-items:flex-start;justify-content:center;z-index:60;padding:40px 16px;overflow-y:auto}
+  .modal.open{display:flex}
+  .mbox{background:#fff;border-radius:14px;max-width:860px;width:100%;padding:26px 30px}
+  .mbox h2{font-size:17px;margin-bottom:4px}
+  .mbox .msub{font-size:12.5px;color:var(--muted);margin-bottom:18px}
+  .wgrid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .wcol h4{font-size:13px;color:var(--accent);margin-bottom:10px}
+  .wrow{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .wrow .lbl{width:200px;font-size:11.5px;color:var(--muted)}
+  .wrow input{flex:1}
+  .wrow .val{width:26px;font-size:11px;font-weight:700;text-align:right}
+  .mfoot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+  .btn2{border:1px solid var(--line);background:#fff;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer}
+  .btn2.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .overlay{position:fixed;inset:0;background:rgba(20,30,36,.25);z-index:40;display:none}
+  .overlay.open{display:block}
+  .foot{margin-top:26px;font-size:11.5px;color:var(--muted);line-height:1.5}
+  @media(max-width:980px){.grid{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Acquisition Intelligence Platform</h1>
+    <div class="sub">Prototype · Southern California pilot · 14 sample businesses (fictional data)</div>
+  </div>
+  <div class="hbtns">
+    <button class="btn" onclick="openWeights()">⚙ Scoring weights</button>
+    <button class="btn" onclick="exportCsv()">⬇ Export CSV</button>
+  </div>
+</header>
+<main>
+  <div class="cards" id="cards"></div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="controls">
+        <input type="text" id="q" placeholder="Search name, city, industry…" oninput="render()">
+        <select id="fInd" onchange="render()"><option value="">All industries</option></select>
+        <select id="fCty" onchange="render()"><option value="">All counties</option></select>
+        <select id="sortBy" onchange="render()">
+          <option value="quality">Sort: Quality</option>
+          <option value="transition">Sort: Transition</option>
+          <option value="broker">Sort: Brokerage fit</option>
+          <option value="ai">Sort: AI upside</option>
+          <option value="ebitda">Sort: EBITDA</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Business</th><th>Tier</th><th>Quality</th><th>Transition</th><th>Broker fit</th><th>AI upside</th><th>EBITDA</th><th>Conf.</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <h3>Quality × Transition map</h3>
+        <canvas id="scatter" height="300"></canvas>
+        <div class="legend">
+          <span><b style="background:var(--acquire)"></b>Acquire</span>
+          <span><b style="background:var(--broker)"></b>Broker</span>
+          <span><b style="background:var(--watch)"></b>Watch</span>
+          <span><b style="background:var(--pass)"></b>Pass</span>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Tier thresholds &amp; buy-box</h3>
+        <div class="thr">
+          <label>Min quality to Acquire <span id="vQ">70</span></label>
+          <input type="range" id="thQ" min="40" max="90" value="70" oninput="render()">
+          <label>Min transition signal <span id="vT">55</span></label>
+          <input type="range" id="thT" min="30" max="85" value="55" oninput="render()">
+          <label>Buy-box EBITDA min ($K) <span id="vE1">400</span></label>
+          <input type="range" id="thE1" min="100" max="1500" step="50" value="400" oninput="render()">
+          <label>Buy-box EBITDA max ($K) <span id="vE2">3000</span></label>
+          <input type="range" id="thE2" min="1000" max="6000" step="100" value="3000" oninput="render()">
+          <div class="hint">Businesses with strong transition signals that fall outside the buy-box — or good-but-not-buyable companies — route to the <b>Broker</b> tier as sell-side mandates instead of being discarded. Move the sliders and watch tiers reassign live.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    Prototype notes: all businesses are fictional but modeled on the target profile (SoCal, 10+ years, $750K–$25M revenue, retiring-owner signals). Scores follow the v2 specification in the strategic document: Business Quality and Transition Probability (per the original plan, rebalanced), plus two new scores — Brokerage Fit and AI Modernization Upside. Data Confidence reflects verified vs. estimated field coverage. In production these fields populate from CSLB/licensing boards, Data Axle, Google Places, assessor records, LLM website analysis, and logged owner conversations.
+  </div>
+</main>
+
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer"></div>
+
+<div class="modal" id="wModal">
+  <div class="mbox">
+    <h2>Scoring weights</h2>
+    <div class="msub">Weights are configuration, not code. In production these are recalibrated quarterly against logged outreach outcomes. Adjust and apply — all scores and tiers recompute.</div>
+    <div class="wgrid" id="wGrid"></div>
+    <div class="mfoot">
+      <button class="btn2" onclick="resetWeights()">Reset defaults</button>
+      <button class="btn2 primary" onclick="closeWeights()">Apply &amp; close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ scoring model v2 ============ */
+const MODEL = {
+  quality: { label:"Business Quality", comps:{
+    revenue:{w:15,label:"Revenue size & stability"}, recurring:{w:15,label:"Recurring revenue"},
+    mgmt:{w:15,label:"Management depth"}, employees:{w:10,label:"Employee base"},
+    years:{w:10,label:"Years operating"}, custdiv:{w:10,label:"Customer diversification"},
+    reputation:{w:10,label:"Reputation (reviews)"}, growth:{w:5,label:"Market growth"},
+    capex:{w:5,label:"Capex lightness"}, finance:{w:5,label:"SBA financeability"} }},
+  transition: { label:"Transition Probability", comps:{
+    tenure:{w:20,label:"Founder tenure"}, response:{w:20,label:"Direct owner response"},
+    licAge:{w:15,label:"Entity / license age"}, noSucc:{w:15,label:"No visible succession"},
+    mgmtRun:{w:10,label:"Mgmt can run it"}, propTen:{w:10,label:"Long property ownership"},
+    noExp:{w:10,label:"Limited recent expansion"} }},
+  broker: { label:"Brokerage Fit", comps:{
+    transfer:{w:25,label:"Transferability"}, finqual:{w:20,label:"Financial record quality"},
+    demand:{w:20,label:"Buyer demand (industry)"}, size:{w:15,label:"Size sweet spot"},
+    realestate:{w:10,label:"Real estate flexibility"}, clean:{w:10,label:"Clean legal history"} }},
+  ai: { label:"AI Modernization Upside", comps:{
+    webgap:{w:25,label:"Website / booking gap"}, callgap:{w:20,label:"Call & scheduling gap"},
+    backoffice:{w:20,label:"Back-office automation gap"}, marketing:{w:15,label:"Marketing gap"},
+    recurconv:{w:10,label:"Recurring-rev conversion"}, datagap:{w:10,label:"Data / reporting gap"} }},
+};
+const DEFAULTS = JSON.parse(JSON.stringify(MODEL));
+
+const IND = {
+  "HVAC":        {growth:80, capex:55, demand:95},
+  "Plumbing":    {growth:75, capex:60, demand:90},
+  "Electrical":  {growth:80, capex:65, demand:88},
+  "Roofing":     {growth:65, capex:50, demand:75},
+  "Restoration": {growth:70, capex:45, demand:80},
+  "Dental":      {growth:75, capex:40, demand:92},
+  "Veterinary":  {growth:85, capex:45, demand:95},
+  "Pet care":    {growth:80, capex:55, demand:70},
+  "Fire protection":{growth:75, capex:60, demand:85},
+  "Commercial cleaning":{growth:60, capex:80, demand:65},
+};
+const BUYBOX_IND = new Set(["HVAC","Plumbing","Electrical","Fire protection","Restoration","Roofing"]);
+
+/* Sample pipeline — fictional. rev in $M, ebitda in $K.
+   response: 0 none / 50 replied / 100 expressed interest. Subjective 0-100 fields would come from research + conversations. */
+const DATA = [
+ {id:1,name:"Coastline Comfort HVAC",industry:"HVAC",city:"Torrance",county:"Los Angeles",years:28,rev:6.2,ebitda:1150,emp:34,tenure:28,rating:4.7,reviews:412,web:2,recurring:38,mgmt:70,custdiv:75,ownerDep:35,finqual:70,propertyOwned:true,propYears:19,noSucc:true,noExp:true,response:100,booking:false,backofficeGap:70,marketingGap:60,conf:"High",disq:false,
+  notes:"Founder (28 yrs) replied to letter; wants to retire within 2 years. GM runs field ops. Maintenance agreements = 38% of revenue. Owns the Torrance shop since 2007."},
+ {id:2,name:"Valley Pro Plumbing & Rooter",industry:"Plumbing",city:"Van Nuys",county:"Los Angeles",years:22,rev:3.4,ebitda:640,emp:19,tenure:22,rating:4.5,reviews:238,web:2,recurring:12,mgmt:45,custdiv:80,ownerDep:60,finqual:55,propertyOwned:true,propYears:14,noSucc:true,noExp:true,response:50,booking:false,backofficeGap:80,marketingGap:75,conf:"Medium",disq:false,
+  notes:"C-36 license since 2004. Owner answered one call, non-committal. Dispatch is whiteboard + phone. Website copyright 2019. Strong Yelp base, no review responses."},
+ {id:3,name:"Bright Circuit Electric",industry:"Electrical",city:"Anaheim",county:"Orange",years:17,rev:4.8,ebitda:880,emp:26,tenure:17,rating:4.8,reviews:190,web:4,recurring:22,mgmt:75,custdiv:60,ownerDep:30,finqual:80,propertyOwned:false,propYears:0,noSucc:false,noExp:false,response:0,booking:true,backofficeGap:40,marketingGap:30,conf:"High",disq:false,
+  notes:"Well-run commercial shop, active hiring, son is listed as ops manager (succession likely). Great business, weak transition signal — nurture."},
+ {id:4,name:"Old Mission Roofing Co.",industry:"Roofing",city:"Riverside",county:"Riverside",years:31,rev:2.1,ebitda:310,emp:12,tenure:31,rating:4.2,reviews:88,web:1,recurring:5,mgmt:30,custdiv:70,ownerDep:80,finqual:40,propertyOwned:true,propYears:24,noSucc:true,noExp:true,response:50,booking:false,backofficeGap:85,marketingGap:85,conf:"Medium",disq:false,
+  notes:"Owner 31-yr tenure, highly owner-dependent, EBITDA below buy-box. Sellable to an area roll-up with real estate angle — classic Broker-tier mandate."},
+ {id:5,name:"Pacific Paws Veterinary Hospital",industry:"Veterinary",city:"Santa Monica",county:"Los Angeles",years:24,rev:5.5,ebitda:1350,emp:28,tenure:24,rating:4.6,reviews:520,web:3,recurring:45,mgmt:65,custdiv:90,ownerDep:50,finqual:75,propertyOwned:true,propYears:18,noSucc:true,noExp:true,response:50,booking:false,backofficeGap:60,marketingGap:40,conf:"High",disq:false,
+  notes:"Two-DVM practice, founder 24 yrs, no associate buy-in visible. Vet consolidators pay premium multiples — strong Broker candidate (outside trades buy-box)."},
+ {id:6,name:"SoCal Fire Systems",industry:"Fire protection",city:"Ontario",county:"San Bernardino",years:19,rev:7.8,ebitda:1600,emp:41,tenure:19,rating:4.4,reviews:64,web:2,recurring:68,mgmt:80,custdiv:55,ownerDep:25,finqual:75,propertyOwned:false,propYears:0,noSucc:true,noExp:true,response:0,booking:false,backofficeGap:65,marketingGap:55,conf:"Medium",disq:false,
+  notes:"Inspection contracts = 68% recurring. Ops manager effectively runs it. No owner contact yet — top of next outreach batch. Paper inspection reports = big AI upside."},
+ {id:7,name:"Harbor Restoration Group",industry:"Restoration",city:"Long Beach",county:"Los Angeles",years:14,rev:9.5,ebitda:1900,emp:52,tenure:14,rating:4.3,reviews:150,web:3,recurring:15,mgmt:85,custdiv:40,ownerDep:20,finqual:85,propertyOwned:false,propYears:0,noSucc:false,noExp:false,response:0,booking:false,backofficeGap:45,marketingGap:35,conf:"High",disq:false,
+  notes:"Insurance-referral concentration (top 3 carriers ≈ 55% of jobs). Young-ish owner, growing. Watch — quality is there, no transition signal."},
+ {id:8,name:"Sunrise Dental Arts",industry:"Dental",city:"Irvine",county:"Orange",years:21,rev:2.8,ebitda:720,emp:14,tenure:21,rating:4.9,reviews:610,web:3,recurring:55,mgmt:50,custdiv:95,ownerDep:70,finqual:70,propertyOwned:false,propYears:0,noSucc:true,noExp:true,response:100,booking:true,backofficeGap:55,marketingGap:30,conf:"High",disq:false,
+  notes:"Dentist-owner expressed interest at a study-club event. Producer-dependent (owner = 70% of production) — better DSO sale than standalone buy. Broker tier."},
+ {id:9,name:"Inland Empire Commercial Cleaning",industry:"Commercial cleaning",city:"Corona",county:"Riverside",years:16,rev:3.9,ebitda:520,emp:85,tenure:16,rating:4.0,reviews:41,web:1,recurring:85,mgmt:55,custdiv:50,ownerDep:45,finqual:45,propertyOwned:false,propYears:0,noSucc:true,noExp:true,response:0,booking:false,backofficeGap:80,marketingGap:80,conf:"Low",disq:false,
+  notes:"Contract revenue 85% recurring but thin margins, messy books (Low confidence — revenue is a Data Axle estimate). Enrich before outreach."},
+ {id:10,name:"Grand Avenue Pet Resort",industry:"Pet care",city:"San Diego",county:"San Diego",years:12,rev:1.9,ebitda:380,emp:22,tenure:12,rating:4.6,reviews:340,web:3,recurring:40,mgmt:40,custdiv:90,ownerDep:55,finqual:60,propertyOwned:true,propYears:12,noSucc:true,noExp:false,response:0,booking:true,backofficeGap:60,marketingGap:45,conf:"Medium",disq:false,
+  notes:"Boarding + grooming + daycare. Capacity-constrained weekends, empty midweek — yield management upside. Below EBITDA buy-box floor; watch or broker."},
+ {id:11,name:"Airflow Masters Heating & Air",industry:"HVAC",city:"Oceanside",county:"San Diego",years:26,rev:4.1,ebitda:790,emp:23,tenure:26,rating:4.4,reviews:275,web:1,recurring:25,mgmt:60,custdiv:78,ownerDep:50,finqual:60,propertyOwned:true,propYears:21,noSucc:true,noExp:true,response:0,booking:false,backofficeGap:75,marketingGap:70,conf:"Medium",disq:false,
+  notes:"Website unchanged since 2016 (Wayback). Zero job postings in 3 years despite strong reviews — classic disengaged-owner pattern. Letter to assessor mailing address queued."},
+ {id:12,name:"Cornerstone Electric Supply & Service",industry:"Electrical",city:"Ventura",county:"Ventura",years:35,rev:2.4,ebitda:290,emp:11,tenure:35,rating:3.9,reviews:33,web:1,recurring:8,mgmt:25,custdiv:65,ownerDep:85,finqual:35,propertyOwned:true,propYears:29,noSucc:true,noExp:true,response:0,booking:false,backofficeGap:85,marketingGap:85,conf:"Low",disq:false,
+  notes:"Declining revenue trend, owner is the business. Real estate likely worth more than the company. Possible asset/property deal, not a going-concern buy."},
+ {id:13,name:"Rapid Rooter Bros.",industry:"Plumbing",city:"Fontana",county:"San Bernardino",years:11,rev:1.6,ebitda:240,emp:9,tenure:11,rating:3.6,reviews:57,web:2,recurring:5,mgmt:20,custdiv:60,ownerDep:90,finqual:30,propertyOwned:false,propYears:0,noSucc:true,noExp:true,response:0,booking:false,backofficeGap:80,marketingGap:80,conf:"Low",disq:true,
+  notes:"CSLB shows a citation in 2024 (disqualifying flag). Two-truck operation, no management layer. Pass — retain for market intel only."},
+ {id:14,name:"Summit Mechanical Contractors",industry:"HVAC",city:"Irwindale",county:"Los Angeles",years:23,rev:12.5,ebitda:2300,emp:64,tenure:23,rating:4.5,reviews:98,web:3,recurring:52,mgmt:85,custdiv:45,ownerDep:20,finqual:85,propertyOwned:true,propYears:16,noSucc:true,noExp:true,response:50,booking:false,backofficeGap:50,marketingGap:50,conf:"High",disq:false,
+  notes:"Commercial mechanical, service agreements 52%. Founder 23 yrs, CFO + ops VP in place, no family successor. Replied: 'call me in the fall.' Highest-priority Acquire target."},
+];
+
+const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
+function comps(b){
+  const ind=IND[b.industry];
+  const sweet = b.ebitda>=400&&b.ebitda<=2000?100: b.ebitda<400? clamp(b.ebitda/400*100): clamp(100-(b.ebitda-2000)/40);
+  return {
+    quality:{ revenue:clamp((b.rev-0.5)/9.5*100), recurring:clamp(b.recurring*1.15), mgmt:b.mgmt,
+      employees:clamp(b.emp/50*100), years:clamp(b.years/25*100), custdiv:b.custdiv,
+      reputation:clamp((b.rating-3)/2*70)+clamp(b.reviews/300*30,0,30), growth:ind.growth, capex:ind.capex,
+      finance:clamp(100-Math.abs(b.ebitda-1200)/1200*60)*(b.finqual>=50?1:.7) },
+    transition:{ tenure:clamp(b.tenure/30*100), response:b.response, licAge:clamp(b.years/25*100),
+      noSucc:b.noSucc?100:10, mgmtRun:b.mgmt, propTen:b.propertyOwned?clamp(b.propYears/20*100):20,
+      noExp:b.noExp?85:20 },
+    broker:{ transfer:100-b.ownerDep, finqual:b.finqual, demand:ind.demand, size:sweet,
+      realestate:b.propertyOwned?90:55, clean:b.disq?0:95 },
+    ai:{ webgap:clamp((5-b.web)/4*100), callgap:b.booking?30:85, backoffice:b.backofficeGap,
+      marketing:b.marketingGap, recurconv:clamp(100-b.recurring), datagap:clamp(b.backofficeGap*.6+((5-b.web)/4*100)*.4) },
+  };
+}
+function score(b,key){
+  const c=comps(b)[key], m=MODEL[key].comps;
+  let tot=0,wsum=0;
+  for(const k in m){ tot+=c[k]*m[k].w; wsum+=m[k].w; }
+  return Math.round(tot/wsum);
+}
+function tierOf(b,s){
+  const thQ=+el("thQ").value, thT=+el("thT").value, e1=+el("thE1").value, e2=+el("thE2").value;
+  if(b.disq || s.quality<45) return "Pass";
+  const inBox = BUYBOX_IND.has(b.industry) && b.ebitda>=e1 && b.ebitda<=e2;
+  if(s.quality>=thQ && s.transition>=thT && inBox) return "Acquire";
+  if(s.transition>=thT && s.broker>=55) return "Broker";
+  return "Watch";
+}
+function aiRecs(b){
+  const r=[];
+  if(b.web<=2) r.push("Rebuild website with online booking/quote request — current site scores "+b.web+"/5; strong reviews ("+b.rating+"★, "+b.reviews+" reviews) are converting nowhere.");
+  if(!b.booking) r.push("Deploy AI phone answering + after-hours call capture; in the trades this typically recovers 10–20% of missed inbound demand.");
+  if(b.backofficeGap>=60) r.push("Automate back office: bookkeeping automation, monthly management accounts, job-costing dashboard — also what makes the business sellable/financeable.");
+  if(["HVAC","Plumbing","Electrical","Fire protection"].includes(b.industry) && b.recurring<40) r.push("Convert one-off customers to maintenance/service agreements (now "+b.recurring+"% recurring) — the single biggest multiple-expansion lever.");
+  if(b.industry==="Fire protection") r.push("AI-drafted inspection & compliance reports; frees billable technician hours and standardizes deliverables.");
+  if(b.industry==="Dental"||b.industry==="Veterinary") r.push("AI reception, recall/reminder automation and insurance verification; no-show reduction flows straight to margin.");
+  if(b.industry==="Pet care") r.push("Yield management for boarding capacity (midweek discounting, memberships) to fix weekend-only utilization.");
+  if(b.marketingGap>=60) r.push("Review-solicitation + local-SEO automation; owner currently does no review responses or paid acquisition.");
+  if(b.ownerDep>=60) r.push("SOP capture program: record the owner's process knowledge (estimating, pricing, key accounts) before close — de-risks transition, raises value.");
+  if(!r.length) r.push("Already well-modernized; upside is incremental (reporting, AI quoting assist).");
+  return r;
+}
+function nextAction(b,tier,s){
+  if(tier==="Acquire") return b.response===100? "<b>Partner call this week.</b> Owner has expressed interest — book an in-person meeting; bring the pre-call research brief and the modernization story."
+    : b.response===50? "<b>Follow up on prior contact.</b> Reference the earlier conversation; letter + call cadence, next touch within 7 days."
+    : "<b>Launch personalized letter</b> to "+(b.propertyOwned?"the assessor mailing address (owner owns the property)":"the business address")+", then call in 5 business days.";
+  if(tier==="Broker") return "<b>Sell-side pitch:</b> offer a confidential valuation. "+(b.response>0?"Owner is already responsive — propose a mandate meeting.":"Warm up via adviser/referral channel before direct pitch.");
+  if(tier==="Watch") return b.conf==="Low"? "<b>Enrich before outreach:</b> confidence is Low — verify revenue (Data Axle refresh, permits, UCC) before spending a touch."
+    : "<b>Nurture cadence:</b> quarterly value-content touch; re-score after next data refresh.";
+  return "<b>Suppress from outreach.</b> Retain for market intelligence; re-check flags annually.";
+}
+const el=id=>document.getElementById(id);
+const fmtE=v=>"$"+(v>=1000?(v/1000).toFixed(1)+"M":v+"K");
+const TIER_COLORS={Acquire:"var(--acquire)",Broker:"var(--broker)",Watch:"var(--watch)",Pass:"var(--pass)"};
+const TIER_HEX={Acquire:"#1e7d4f",Broker:"#8a5fbf",Watch:"#c98a1b",Pass:"#96a3ac"};
+let tierFilter="", selId=null;
+
+function computeAll(){
+  return DATA.map(b=>{ const s={quality:score(b,"quality"),transition:score(b,"transition"),broker:score(b,"broker"),ai:score(b,"ai")};
+    return {...b,s,tier:tierOf(b,s)}; });
+}
+function render(){
+  ["Q","T","E1","E2"].forEach(k=>el("v"+k).textContent=el("th"+k).value);
+  const rows=computeAll();
+  // cards
+  const counts={Acquire:0,Broker:0,Watch:0,Pass:0};
+  rows.forEach(r=>counts[r.tier]++);
+  const cd={Acquire:"Fits buy-box, strong transition signal — partner-led outreach",
+    Broker:"Wouldn't buy, would sell — sell-side mandate pipeline",
+    Watch:"Quality or signal not there yet — nurture & enrich",
+    Pass:"Disqualified or poor fit — market intel only"};
+  el("cards").innerHTML=Object.keys(counts).map(t=>
+    `<div class="card ${t.toLowerCase()} ${tierFilter===t?'active':''}" onclick="toggleTier('${t}')">
+      <div class="t">${t.toUpperCase()}</div><div class="n">${counts[t]}</div><div class="d">${cd[t]}</div></div>`).join("");
+  // filters
+  fillSel("fInd",[...new Set(DATA.map(b=>b.industry))]);
+  fillSel("fCty",[...new Set(DATA.map(b=>b.county))]);
+  const q=el("q").value.toLowerCase(), fi=el("fInd").value, fc=el("fCty").value, sb=el("sortBy").value;
+  let list=rows.filter(r=>(!tierFilter||r.tier===tierFilter)&&(!fi||r.industry===fi)&&(!fc||r.county===fc)
+    &&(!q||(r.name+r.city+r.industry).toLowerCase().includes(q)));
+  list.sort((a,b)=> sb==="ebitda"? b.ebitda-a.ebitda : b.s[sb]-a.s[sb]);
+  el("tbody").innerHTML=list.map(r=>`
+    <tr class="rowb ${selId===r.id?'sel':''}" onclick="openDrawer(${r.id})">
+      <td><div class="bname">${r.name}</div><div class="bsub">${r.industry} · ${r.city}, ${r.county} Co. · ${r.years} yrs</div></td>
+      <td><span class="pill ${r.tier.toLowerCase()}">${r.tier}</span></td>
+      ${["quality","transition","broker","ai"].map(k=>`<td><span class="score">${r.s[k]}</span><div class="mini"><i style="width:${r.s[k]}%;background:${TIER_HEX[r.tier]}"></i></div></td>`).join("")}
+      <td>${fmtE(r.ebitda)}</td>
+      <td><span class="conf ${r.conf}">${r.conf}</span></td>
+    </tr>`).join("") || `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px">No businesses match.</td></tr>`;
+  drawScatter(rows);
+  if(selId){const r=rows.find(x=>x.id===selId); if(r) fillDrawer(r);}
+}
+function fillSel(id,vals){
+  const s=el(id), cur=s.value;
+  if(s.options.length<=1) vals.sort().forEach(v=>{const o=document.createElement("option");o.value=o.textContent=v;s.appendChild(o);});
+  s.value=cur;
+}
+function toggleTier(t){ tierFilter = tierFilter===t? "": t; render(); }
+
+function drawScatter(rows){
+  const c=el("scatter"), dpr=window.devicePixelRatio||1;
+  const W=c.clientWidth||330, H=300;
+  c.width=W*dpr; c.height=H*dpr;
+  const x=c.getContext&&c.getContext("2d"); if(!x) return; x.scale(dpr,dpr);
+  const pad={l:34,r:12,t:12,b:28};
+  const px=v=>pad.l+(v/100)*(W-pad.l-pad.r), py=v=>H-pad.b-(v/100)*(H-pad.t-pad.b);
+  x.clearRect(0,0,W,H);
+  // quadrant shading at current thresholds
+  const thQ=+el("thQ").value, thT=+el("thT").value;
+  x.fillStyle="rgba(30,125,79,.07)"; x.fillRect(px(thT),py(100),px(100)-px(thT),py(thQ)-py(100));
+  x.strokeStyle="#dfe6ea"; x.lineWidth=1;
+  x.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  x.setLineDash([4,3]); x.strokeStyle="#b9c6cd";
+  x.beginPath(); x.moveTo(px(thT),py(0)); x.lineTo(px(thT),py(100)); x.stroke();
+  x.beginPath(); x.moveTo(px(0),py(thQ)); x.lineTo(px(100),py(thQ)); x.stroke();
+  x.setLineDash([]);
+  x.fillStyle="#687a86"; x.font="10px sans-serif";
+  x.fillText("Transition probability →",W/2-52,H-8);
+  x.save(); x.translate(10,H/2+40); x.rotate(-Math.PI/2); x.fillText("Business quality →",0,0); x.restore();
+  rows.forEach(r=>{
+    x.beginPath(); x.arc(px(r.s.transition),py(r.s.quality),r.id===selId?7:5,0,7);
+    x.fillStyle=TIER_HEX[r.tier]; x.globalAlpha=.9; x.fill(); x.globalAlpha=1;
+    if(r.id===selId){x.strokeStyle="#1e2a32";x.lineWidth=1.5;x.stroke();}
+  });
+  c.onclick=e=>{
+    const rect=c.getBoundingClientRect(), mx=e.clientX-rect.left, my=e.clientY-rect.top;
+    let best=null,bd=12;
+    rows.forEach(r=>{const d=Math.hypot(mx-px(r.s.transition),my-py(r.s.quality)); if(d<bd){bd=d;best=r;}});
+    if(best) openDrawer(best.id);
+  };
+}
+
+function openDrawer(id){ selId=id; const r=computeAll().find(x=>x.id===id); fillDrawer(r);
+  el("drawer").classList.add("open"); el("overlay").classList.add("open"); render(); }
+function closeDrawer(){ selId=null; el("drawer").classList.remove("open"); el("overlay").classList.remove("open"); render(); }
+function fillDrawer(r){
+  const c=comps(r);
+  const block=key=>{
+    const m=MODEL[key].comps;
+    return `<div class="sblock"><h4>${MODEL[key].label} <span class="score">${r.s[key]}</span></h4>`+
+      Object.keys(m).map(k=>`<div class="sbar"><div class="lbl">${m[k].label} <span style="opacity:.6">(${m[k].w})</span></div>
+        <div class="track"><i style="width:${Math.round(c[key][k])}%;background:${TIER_HEX[r.tier]}"></i></div>
+        <div class="val">${Math.round(c[key][k])}</div></div>`).join("")+`</div>`;
+  };
+  el("drawer").innerHTML=`
+    <div class="dhead"><button class="close" onclick="closeDrawer()">×</button>
+      <h2>${r.name}</h2>
+      <div class="m">${r.industry} · ${r.city}, ${r.county} County · <span class="pill ${r.tier.toLowerCase()}" style="background:rgba(255,255,255,.9)">${r.tier}</span> &nbsp;<span class="conf ${r.conf}">${r.conf} confidence</span></div>
+    </div>
+    <div class="dbody">
+      <div class="facts">
+        <div class="fact"><div class="k">Revenue (est.)</div><div class="v">$${r.rev.toFixed(1)}M</div></div>
+        <div class="fact"><div class="k">EBITDA (est.)</div><div class="v">${fmtE(r.ebitda)}</div></div>
+        <div class="fact"><div class="k">Employees</div><div class="v">${r.emp}</div></div>
+        <div class="fact"><div class="k">Years / owner tenure</div><div class="v">${r.years} / ${r.tenure}</div></div>
+        <div class="fact"><div class="k">Google</div><div class="v">${r.rating}★ · ${r.reviews}</div></div>
+        <div class="fact"><div class="k">Property</div><div class="v">${r.propertyOwned?"Owned "+r.propYears+" yrs":"Leased"}</div></div>
+        <div class="fact"><div class="k">Recurring revenue</div><div class="v">${r.recurring}%</div></div>
+        <div class="fact"><div class="k">Website score</div><div class="v">${r.web} / 5</div></div>
+        <div class="fact"><div class="k">Owner response</div><div class="v">${r.response===100?"Interested":r.response===50?"Replied":"None yet"}</div></div>
+      </div>
+      <div class="notes">${r.notes}</div>
+      <div class="next">${nextAction(r,r.tier,r.s)}</div>
+      <div class="ai"><h4>⚡ AI modernization plan (upside score ${r.s.ai})</h4><ul>${aiRecs(r).map(x=>`<li>${x}</li>`).join("")}</ul></div>
+      ${block("quality")}${block("transition")}${block("broker")}${block("ai")}
+    </div>`;
+}
+
+/* weights modal */
+function openWeights(){
+  el("wGrid").innerHTML=Object.keys(MODEL).map(key=>{
+    const m=MODEL[key].comps;
+    return `<div class="wcol"><h4>${MODEL[key].label}</h4>`+Object.keys(m).map(k=>
+      `<div class="wrow"><div class="lbl">${m[k].label}</div>
+       <input type="range" min="0" max="30" value="${m[k].w}" oninput="MODEL['${key}'].comps['${k}'].w=+this.value;this.nextElementSibling.textContent=this.value;render()">
+       <div class="val">${m[k].w}</div></div>`).join("")+`</div>`;
+  }).join("");
+  el("wModal").classList.add("open");
+}
+function closeWeights(){ el("wModal").classList.remove("open"); render(); }
+function resetWeights(){ for(const s in DEFAULTS) for(const k in DEFAULTS[s].comps) MODEL[s].comps[k].w=DEFAULTS[s].comps[k].w; openWeights(); render(); }
+el("wModal").addEventListener("click",e=>{ if(e.target.id==="wModal") closeWeights(); });
+
+function exportCsv(){
+  const rows=computeAll();
+  const head=["Name","Industry","City","County","Years","Revenue($M)","EBITDA($K)","Employees","OwnerTenure","Tier","Quality","Transition","BrokerFit","AIUpside","Confidence"];
+  const csv=[head.join(",")].concat(rows.map(r=>[`"${r.name}"`,r.industry,r.city,r.county,r.years,r.rev,r.ebitda,r.emp,r.tenure,r.tier,r.s.quality,r.s.transition,r.s.broker,r.s.ai,r.conf].join(","))).join("\n");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download="acquisition_pipeline.csv"; a.click();
+}
+window.addEventListener("resize",()=>render());
+render();
+</script>
+</body>
+</html>
