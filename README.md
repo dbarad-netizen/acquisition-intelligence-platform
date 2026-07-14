@@ -37,8 +37,11 @@ The coach won't work when opening `index.html` as a local file — it needs the 
 - The API key stays server-side in the Vercel function; it is never exposed in the page.
 - Cost: pay-as-you-go on your Anthropic account; typical chat turns cost fractions of a cent.
 
-## Roadmap to real data
+## Database (LIVE)
 
-- Replace the hardcoded `DATA` array with a fetch from Supabase (free tier is plenty).
-- Seed from free sources (CSLB contractor files, city business-license CSVs), then enrich (Google Places, LLM website analysis), then commercial data (Data Axle).
-- Keep scoring weights in a `config` table so recalibration doesn't require a deploy.
+The app loads live data from Supabase (project `xazmwpozsmbrqoulizyn`, tables prefixed `acq_`):
+`acq_businesses` holds 3,601 real LA County contractors (CSLB licenses 15+ yrs, workers'-comp insured, CLEAR status, C-10/C-20/C-36/C-39). The page falls back to an embedded snapshot if the database is unreachable. The publishable key in `index.html` is safe to expose — row-level security makes it read-only; writes require an authenticated user or the service-role key.
+
+Also live: `acq_outreach` (call/letter log + next actions), `acq_score_snapshots` (scores at time of outreach, for calibration), `acq_score_weights` and `acq_config` (weights/thresholds as data). See `db/schema.sql`.
+
+Next enrichment passes: Google Places (+rating/website/status), LLM website analysis, assessor property lookups, Data Axle (revenue/contacts).
