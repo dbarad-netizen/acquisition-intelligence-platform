@@ -116,6 +116,16 @@
   .cavatar{width:34px;height:34px;border-radius:50%;object-fit:cover;object-position:35% 12%;border:2px solid rgba(255,255,255,.7);vertical-align:middle}
   .coachFab{display:flex;align-items:center;gap:9px}
   .coachFab .cavatar{width:30px;height:30px}
+  /* outreach log */
+  .olog{background:#f7f9fa;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:18px}
+  .olog h4{font-size:13px;color:var(--accent);margin-bottom:8px}
+  .ologlist{font-size:12px;margin-bottom:10px;max-height:190px;overflow-y:auto}
+  .oentry{border-left:3px solid var(--accent2);padding:6px 10px;margin-bottom:6px;background:#fff;border-radius:6px;line-height:1.45}
+  .oentry .om{color:var(--muted);font-size:10.5px}
+  .oform textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;margin:6px 0;min-height:52px;font-family:inherit}
+  .orow{display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center}
+  .orow select,.orow input{flex:1;border:1px solid var(--line);border-radius:8px;padding:7px 8px;font-size:12px;min-width:110px;background:#fff}
+  .omsg{font-size:11.5px;margin-left:8px;color:var(--muted)}
   /* AI coach */
   .coachFab{position:fixed;bottom:22px;right:22px;z-index:45;background:var(--accent);color:#fff;border:none;border-radius:50px;padding:14px 20px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.25)}
   .coach{position:fixed;bottom:22px;right:22px;width:400px;max-width:94vw;height:560px;max-height:80vh;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.22);z-index:55;display:none;flex-direction:column;overflow:hidden}
@@ -471,8 +481,30 @@ function fillDrawer(r){
       <div class="notes">${r.notes}</div>
       <div class="next">${nextAction(r,r.tier,r.s)}</div>
       <div class="ai"><h4>⚡ AI modernization plan (upside score ${r.s.ai})</h4><ul>${aiRecs(r).map(x=>`<li>${x}</li>`).join("")}</ul></div>
+      <div class="olog"><h4>&#128222; Outreach log</h4>
+        <div id="ologList" class="ologlist">Loading&hellip;</div>
+        <form class="oform" onsubmit="return submitOutreach(event)">
+          <div class="orow">
+            <select id="oChannel"><option value="call">Call</option><option value="letter">Letter</option><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="referral">Referral</option><option value="event">Event</option><option value="inbound">Inbound</option></select>
+            <select id="oOutcome" onchange="el('t3row').style.display=['conversation','interested','mandate_signed','loi_signed','closed'].includes(this.value)?'flex':'none'">
+              <option value="">Outcome&hellip;</option><option value="no_response">No response</option><option value="bad_contact">Bad contact info</option><option value="conversation">Conversation</option><option value="interested">Interested</option><option value="not_interested">Not interested</option><option value="mandate_signed">Mandate signed</option><option value="loi_signed">LOI signed</option><option value="closed">Closed</option>
+            </select>
+          </div>
+          <textarea id="oSummary" placeholder="What happened? These notes become your proprietary dataset."></textarea>
+          <div class="orow"><input id="oNext" placeholder="Next action"><input id="oNextDate" type="date"></div>
+          <div class="orow" id="t3row" style="display:none">
+            <input id="oTimeline" placeholder="Retirement timeline (e.g. 2 yrs)">
+            <input id="oPrice" placeholder="Price expectation ($)" type="number">
+            <label style="font-size:11px;flex:1;min-width:130px"><input type="checkbox" id="oSellerFin"> Seller financing open</label>
+          </div>
+          <div class="orow"><button class="btn2 primary" type="submit" id="oSubmit">Log touch</button><span id="oMsg" class="omsg"></span></div>
+        </form>
+      </div>
       ${block("quality")}${block("transition")}${block("broker")}${block("ai")}
     </div>`;
+  drawerLic=r.lic||null;
+  if(drawerLic) loadOutreach();
+  else { const l=el("ologList"); if(l) l.textContent="No license id on this record."; }
 }
 
 /* weights modal */
@@ -564,15 +596,75 @@ async function sendCoach(){
 }
 const _renderOrig=render; render=function(){_renderOrig(); updateCoachCtx();};
 
+
+/* ============ outreach log ============ */
+let drawerLic=null;
+function getPass(force){
+  let p=localStorage.getItem("acq_pass");
+  if(!p||force){ p=prompt("Team passcode (set as TEAM_PASSCODE in Vercel):"); if(p) localStorage.setItem("acq_pass",p); }
+  return p;
+}
+function oesc(t){return String(t??"").replace(/&/g,"&amp;").replace(/</g,"&lt;");}
+async function oFetch(url,opts,retried){
+  const p=getPass(); if(!p) throw new Error("passcode required");
+  const r=await fetch(url,{...opts,headers:{...(opts&&opts.headers||{}),"x-team-passcode":p,"content-type":"application/json"}});
+  if(r.status===401&&!retried){ localStorage.removeItem("acq_pass"); return oFetch(url,opts,true); }
+  return r;
+}
+async function loadOutreach(){
+  const box=el("ologList"); if(!box||!drawerLic) return;
+  if(location.protocol==="file:"){ box.textContent="Outreach log works on the deployed site (needs /api/outreach)."; return; }
+  try{
+    const r=await oFetch("/api/outreach?license="+drawerLic);
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||("HTTP "+r.status));
+    box.innerHTML=(d.entries&&d.entries.length)? d.entries.map(e=>
+      `<div class="oentry"><b>${oesc(e.channel)}</b>${e.outcome?" → "+oesc(e.outcome).replace(/_/g," "):""}${e.summary?"<br>"+oesc(e.summary):""}${e.retirement_timeline?"<br>⏳ "+oesc(e.retirement_timeline):""}${e.price_expectation?" · 💰 $"+Number(e.price_expectation).toLocaleString():""}${e.next_action?"<br>▶ "+oesc(e.next_action)+(e.next_action_date?" by "+e.next_action_date:""):""}<div class="om">${(e.occurred_at||"").slice(0,10)}${e.created_by?" · "+oesc(e.created_by):""}</div></div>`).join("")
+      : "No touches logged yet — this record is untouched.";
+  }catch(e){ box.textContent="Log unavailable: "+e.message; }
+}
+async function submitOutreach(ev){
+  ev.preventDefault();
+  if(!drawerLic) return false;
+  const msg=el("oMsg"), btn=el("oSubmit");
+  if(location.protocol==="file:"){ msg.textContent="Deploy to use the log."; return false; }
+  const rec=computeAll().find(x=>x.lic===drawerLic);
+  const body={ license:drawerLic, channel:el("oChannel").value, outcome:el("oOutcome").value||null,
+    summary:el("oSummary").value.trim(), next_action:el("oNext").value.trim(), next_action_date:el("oNextDate").value||null,
+    retirement_timeline:el("oTimeline").value.trim(), price_expectation:parseFloat(el("oPrice").value)||null,
+    seller_financing_open:el("oSellerFin").checked||null,
+    scores:rec?rec.s:null, tier:rec?rec.tier:null };
+  btn.disabled=true; msg.textContent="Saving…";
+  try{
+    const r=await oFetch("/api/outreach",{method:"POST",body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||("HTTP "+r.status));
+    msg.textContent="Logged ✓";
+    el("oSummary").value=""; el("oNext").value=""; el("oNextDate").value=""; el("oTimeline").value=""; el("oPrice").value=""; el("oSellerFin").checked=false;
+    // reflect owner response locally so scores/tier update immediately
+    if(d.owner_response){ const raw=DATA.find(x=>x.lic===drawerLic);
+      if(raw){ raw.response=d.owner_response==="interested"?100:(d.owner_response==="replied"?50:0); render(); } }
+    loadOutreach();
+  }catch(e){ msg.textContent="Failed: "+e.message; }
+  btn.disabled=false;
+  return false;
+}
+
 /* ============ live data from Supabase ============ */
 const SUPA_URL="https://xazmwpozsmbrqoulizyn.supabase.co";
 const SUPA_KEY="sb_publishable_nxpCXX6gQ8ZOWjFGdgFi3A_hcfOxoSY";
 (async function(){
   try{
-    const r=await fetch(SUPA_URL+"/rest/v1/acq_businesses?select=name,industry,city,zip,year_established,business_type,license_number,phone,city_registered,classifications&order=year_established.asc&limit=10000",
-      {headers:{apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY}});
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    const rows=await r.json();
+    // PostgREST caps responses at 1,000 rows — paginate until a short page
+    const rows=[]; const PAGE=1000;
+    for(let off=0; off<20000; off+=PAGE){
+      const r=await fetch(SUPA_URL+"/rest/v1/acq_businesses?select=name,industry,city,zip,year_established,business_type,license_number,phone,city_registered,classifications&order=license_number.asc&limit="+PAGE+"&offset="+off,
+        {headers:{apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY}});
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      const page=await r.json();
+      rows.push(...page);
+      if(page.length<PAGE) break;
+    }
     if(!Array.isArray(rows)||rows.length===0) return;
     const mapped=rows.map((b,i)=>expandRec([b.name,b.industry,b.city||"",b.zip||"",b.year_established,({sole:0,corp:1,other:2})[b.business_type]??2,b.license_number,b.phone||"",b.city_registered?1:0,b.classifications||""],i));
     DATA.length=0; mapped.forEach(m=>DATA.push(m));

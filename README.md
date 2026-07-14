@@ -37,6 +37,16 @@ The coach won't work when opening `index.html` as a local file — it needs the 
 - The API key stays server-side in the Vercel function; it is never exposed in the page.
 - Cost: pay-as-you-go on your Anthropic account; typical chat turns cost fractions of a cent.
 
+## Outreach log (LIVE)
+
+Open any business → the drawer has an Outreach log: every call, letter, or email gets logged to `acq_outreach` with outcome, notes, next action + date, and the Tier-3 conversation fields (retirement timeline, price expectation, seller-financing openness). Each save also snapshots the business's current scores to `acq_score_snapshots` — that's the calibration dataset — and updates the owner-response field, which re-scores the record instantly.
+
+Setup (one time, in Vercel → Settings → Environment Variables):
+- `SUPABASE_SERVICE_ROLE_KEY` — Supabase dashboard → Project Settings → API → `service_role` key (keep secret; server-side only)
+- `TEAM_PASSCODE` — any shared secret you choose; the site prompts for it once per browser
+
+Redeploy after adding the vars. Writes go through `api/outreach.js`; the passcode gates access and the service key never reaches the browser.
+
 ## Database (LIVE)
 
 The app loads live data from Supabase (project `xazmwpozsmbrqoulizyn`, tables prefixed `acq_`):
