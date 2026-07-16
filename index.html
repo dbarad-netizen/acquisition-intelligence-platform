@@ -116,6 +116,19 @@
   .cavatar{width:34px;height:34px;border-radius:50%;object-fit:cover;object-position:35% 12%;border:2px solid rgba(255,255,255,.7);vertical-align:middle}
   .coachFab{display:flex;align-items:center;gap:9px}
   .coachFab .cavatar{width:30px;height:30px}
+  /* score explainability */
+  .formula{font-size:10.5px;color:var(--muted);margin-bottom:6px}
+  .srcb{width:18px;height:18px;border-radius:50%;font-size:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;margin-left:6px;flex:none}
+  .srcb.verified{background:#e7f5ee;color:#1e7d4f}
+  .srcb.estimated{background:#fdf3e0;color:#c98a1b}
+  .srcb.benchmark{background:#eaf2f5;color:#2e7d94}
+  .srcb.unknown{background:#eef1f3;color:#96a3ac}
+  .sbar.expl{cursor:pointer;border-radius:6px;padding:2px 4px;margin:0 -4px 5px}
+  .sbar.expl:hover{background:#f2f6f8}
+  .why{display:none;font-size:11.5px;color:#4a5a64;background:#f7f9fa;border-left:3px solid var(--accent2);padding:7px 10px;margin:2px 0 8px 8px;border-radius:6px;line-height:1.5}
+  .tierwhy{background:#eef4f6;border:1px solid #d5e3e8;border-radius:10px;padding:11px 14px;font-size:12.5px;line-height:1.55;margin-bottom:12px}
+  .prov{font-size:11px;color:var(--muted);margin:0 0 14px;line-height:1.6}
+  .prov .srcb{width:15px;height:15px;font-size:9px;margin:0 2px 0 8px;vertical-align:middle}
   /* outreach log */
   .olog{background:#f7f9fa;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:18px}
   .olog h4{font-size:13px;color:var(--accent);margin-bottom:8px}
@@ -452,14 +465,96 @@ function drawScatter(rows){
 function openDrawer(id){ selId=id; const r=computeAll().find(x=>x.id===id); fillDrawer(r);
   el("drawer").classList.add("open"); el("overlay").classList.add("open"); render(); }
 function closeDrawer(){ selId=null; el("drawer").classList.remove("open"); el("overlay").classList.remove("open"); render(); }
+
+/* ============ score explainability ============ */
+const SRCL={verified:"✓",estimated:"≈",benchmark:"◆",unknown:"?"};
+const SRCN={verified:"verified public record",estimated:"heuristic estimate",benchmark:"industry benchmark",unknown:"unknown — neutral placeholder"};
+function explain(b,key,k){
+  const V=w=>({src:"verified",why:w}), E=w=>({src:"estimated",why:w}), U=w=>({src:"unknown",why:w}), B=w=>({src:"benchmark",why:w});
+  const bt=BT[b.btype]||"business", yrs=b.years;
+  const M={
+  "quality.revenue": ()=> b.rev==null? U("Private-company revenue isn't public. Held at neutral-low 40 until enriched — Data Axle estimate, permit volumes, or the owner tells you.")
+    : V("Revenue estimate $"+b.rev+"M scaled across the $0.5–10M target range."),
+  "quality.recurring": ()=> b.recurring==null? U("Recurring-revenue mix unknown. Website analysis (maintenance-plan pages) or a conversation fills this. Neutral 40.")
+    : V("Recurring revenue "+b.recurring+"% (×1.15 scaling)."),
+  "quality.mgmt": ()=> b.btype!=null? E("No org-chart data yet — estimated from CSLB business type ("+bt+"). Sole owners rarely have a management layer; corporations usually have some. LinkedIn research refines this.")
+    : (b.mgmt==null? U("Management depth unknown. Neutral 50."):V("From research: "+b.mgmt+"/100.")),
+  "quality.employees": ()=> b.emp==null? (b.wc? E("CSLB shows active workers'-comp insurance — verified proof that employees exist, but not how many. Set to 55; LinkedIn or website headcount refines it.")
+    : U("No employee evidence. Low 25.")) : V(b.emp+" employees (scaled: 50+ = 100)."),
+  "quality.years": ()=> V("CSLB license issued "+b.startYear+" → "+yrs+" years in business (verified). Scale caps at 25 yrs = 100."),
+  "quality.custdiv": ()=> b.custdiv==null? U("Customer concentration can't be seen in public data — it comes from the owner conversation. Neutral 50."):V("From research: "+b.custdiv+"/100."),
+  "quality.reputation": ()=> b.rating==null? U("No Google rating loaded yet — the Places enrichment pass fills this for ~2¢/record. Neutral 45.")
+    : V("Google "+b.rating+"★ across "+b.reviews+" reviews (rating worth 70 pts, review volume 30)."),
+  "quality.growth": ()=> B("Industry benchmark for "+b.industry+" demand growth (fixed table — editable via Scoring weights)."),
+  "quality.capex": ()=> B("Industry benchmark: how capital-light "+b.industry+" businesses typically are."),
+  "quality.finance": ()=> b.ebitda==null? U("SBA financeability turns on EBITDA, which is unknown. Neutral 50.")
+    : V("Distance of EBITDA ("+fmtE(b.ebitda)+") from the ~$1.2M sweet spot."),
+  "transition.tenure": ()=> E("Proxy: license age ("+yrs+" yrs). Assumes the original owner still runs it — a very old license may actually mean second generation. Verify via LinkedIn, website team page, or the first call."),
+  "transition.response": ()=> b.response===0? V("No owner contact yet — from your outreach log. This is 20% of the score; a single logged conversation moves this record more than any data purchase.")
+    : V("From your outreach log: owner "+(b.response===100?"expressed interest":"replied")+"."),
+  "transition.licAge": ()=> V("CSLB issue date "+b.startYear+" (verified public record)."),
+  "transition.noSucc": ()=> b.noSucc==null? U("No succession research yet (LinkedIn / website team page). Held near-neutral 55.")
+    : V(b.noSucc?"No visible successor found in research.":"A likely successor is visible — strong negative signal."),
+  "transition.mgmtRun": ()=> E("Mirrors the management-depth estimate above — a business that can run without the owner is easier for them to leave."),
+  "transition.propTen": ()=> b.propertyOwned==null? U("Property ownership unknown — a free assessor lookup fills this. "+(b.mailingDiff?"Mailing address differs from the business address (mild positive hint) → 55.":"Neutral-low 40."))
+    : V(b.propertyOwned?"Owns the property "+(b.propYears||"?")+" yrs (assessor).":"Leases — weaker signal."),
+  "transition.noExp": ()=> b.noExp==null? U("Expansion activity unknown (job postings, permits, new locations). Neutral 50.")
+    : V(b.noExp?"No recent expansion found — consistent with a wind-down mindset.":"Actively expanding — argues against near-term exit."),
+  "broker.transfer": ()=> b.btype!=null? E("Estimated from business type ("+bt+"): sole-owner businesses transfer hardest because the owner IS the business.")
+    : (b.ownerDep==null? U("Owner dependence unknown. Neutral 50."):V("Owner dependence "+b.ownerDep+"/100 from research.")),
+  "broker.finqual": ()=> b.finqual==null? U("Quality of the books is unknown until financials are shared. Neutral-low 45 — most small trades run messy books.")
+    : V("From review of financials: "+b.finqual+"/100."),
+  "broker.demand": ()=> B("Buyer-demand benchmark for "+b.industry+" — PE platforms and strategics are highly active in the licensed trades."),
+  "broker.size": ()=> b.ebitda==null? U("Size sweet spot needs EBITDA (buyers cluster at $400K–$2M). Neutral 50.")
+    : V("EBITDA "+fmtE(b.ebitda)+" vs the $400K–$2M sweet spot."),
+  "broker.realestate": ()=> b.propertyOwned==null? U("Unknown — assessor lookup fills this. Owned real estate adds deal options (sale-leaseback, second commission). Neutral 50.")
+    : V(b.propertyOwned?"Owner-occupied real estate confirmed — adds deal flexibility.":"Leased premises."),
+  "broker.clean": ()=> V("CSLB status CLEAR, bond and workers'-comp current, no disciplinary flags found → 95 (verified)."),
+  "ai.webgap": ()=> b.web==null? U("Website not assessed yet — the LLM website-analysis pass scores it 1–5. Held at 65: most 15+ yr trade businesses skew dated, which is upside.")
+    : V("Website scored "+b.web+"/5 — the worse the site, the bigger the modernization gain."),
+  "ai.callgap": ()=> b.booking==null? U("Online booking presence unknown until the website pass. Held at 65.")
+    : V(b.booking?"Online booking exists — smaller gap (30).":"No online booking — AI phone/scheduling typically recovers 10–20% of missed demand (85)."),
+  "ai.backoffice": ()=> b.backofficeGap==null? U("Back-office stack unknown — assessed from website tech signals and the first conversation. Held at 65.")
+    : V("From research: "+b.backofficeGap+"/100 gap."),
+  "ai.marketing": ()=> b.marketingGap==null? U("Marketing sophistication unknown until the Places + website pass (review responses, ads, SEO). Held at 65.")
+    : V("From research: "+b.marketingGap+"/100 gap."),
+  "ai.recurconv": ()=> b.recurring==null? U("Headroom to convert one-off customers to service agreements depends on the current recurring mix (unknown). Held at 65.")
+    : V("Current recurring "+b.recurring+"% → "+(100-b.recurring)+" points of conversion headroom."),
+  "ai.datagap": ()=> U("Reporting/data maturity is inferred later from back-office and website findings. Held at 65."),
+  };
+  const f=M[key+"."+k];
+  return f? f() : U("No source information.");
+}
+function tierWhy(r){
+  const thQ=+el("thQ").value, thT=+el("thT").value, e1=+el("thE1").value, e2=+el("thE2").value, s=r.s;
+  if(r.disq) return "Pass — a disqualifying flag is on the record (license/legal issue).";
+  if(s.quality<45&&r.conf!=="Low") return "Pass — quality "+s.quality+" is below the 45 floor, with enough data confidence to act on it.";
+  const inBox=BUYBOX_IND.has(r.industry)&&r.ebitda!=null&&r.ebitda>=e1&&r.ebitda<=e2;
+  if(s.quality>=thQ&&s.transition>=thT&&inBox) return "Acquire — quality "+s.quality+" ≥ "+thQ+", transition "+s.transition+" ≥ "+thT+", and EBITDA sits inside the buy-box ("+fmtE(e1)+"–"+fmtE(e2)+").";
+  if(s.transition>=thT&&s.broker>=55) return "Broker — transition "+s.transition+" clears the "+thT+" threshold and brokerage fit is "+s.broker+", but "+(r.ebitda==null?"EBITDA is unknown, so it can't be tested against the Acquire buy-box yet. An owner conversation or Data Axle estimate could move this to Acquire":"it doesn't meet the Acquire criteria")+".";
+  const miss=[];
+  if(s.transition<thT) miss.push("transition "+s.transition+" is below "+thT+" — no owner response yet is the biggest drag (worth "+MODEL.transition.comps.response.w+"% of the score)");
+  if(s.quality<thQ) miss.push("quality "+s.quality+" is below the "+thQ+" Acquire bar");
+  if(r.ebitda==null) miss.push("EBITDA is unknown, so the buy-box can't be tested");
+  if(s.transition>=thT&&s.broker<55) miss.push("brokerage fit "+s.broker+" is below 55");
+  return "Watch — "+(miss.length?miss.join("; "):"signals are middling")+". Enrichment or a logged owner conversation is what promotes it.";
+}
+
 function fillDrawer(r){
   const c=comps(r);
   const block=key=>{
     const m=MODEL[key].comps;
-    return `<div class="sblock"><h4>${MODEL[key].label} <span class="score">${r.s[key]}</span></h4>`+
-      Object.keys(m).map(k=>`<div class="sbar"><div class="lbl">${m[k].label} <span style="opacity:.6">(${m[k].w})</span></div>
-        <div class="track"><i style="width:${Math.round(c[key][k])}%;background:${TIER_HEX[r.tier]}"></i></div>
-        <div class="val">${Math.round(c[key][k])}</div></div>`).join("")+`</div>`;
+    let wsum=0; Object.keys(m).forEach(k=>wsum+=m[k].w);
+    return `<div class="sblock"><h4>${MODEL[key].label} <span class="score">${r.s[key]}</span></h4>
+      <div class="formula">Score = Σ(component × weight) ÷ ${wsum} — click any row for its source and reasoning</div>`+
+      Object.keys(m).map(k=>{
+        const v=Math.round(c[key][k]), ex=explain(r,key,k), pts=v*m[k].w/wsum;
+        return `<div class="sbar expl" onclick="const w=this.nextElementSibling;w.style.display=w.style.display==='block'?'none':'block'">
+        <div class="lbl">${m[k].label} <span style="opacity:.6">(${m[k].w})</span></div>
+        <div class="track"><i style="width:${v}%;background:${TIER_HEX[r.tier]}"></i></div>
+        <div class="val">${v}</div><span class="srcb ${ex.src}" title="${SRCN[ex.src]}">${SRCL[ex.src]}</span></div>
+        <div class="why">${ex.why} <b>Contributes ${pts.toFixed(1)} of ${r.s[key]} pts</b> (${v} × ${m[k].w} ÷ ${wsum}).</div>`;
+      }).join("")+`</div>`;
   };
   el("drawer").innerHTML=`
     <div class="dhead"><button class="close" onclick="closeDrawer()">×</button>
@@ -479,6 +574,8 @@ function fillDrawer(r){
         <div class="fact"><div class="k">Owner response</div><div class="v">${r.response===100?"Interested":r.response===50?"Replied":"None yet"}</div></div>
       </div>
       <div class="notes">${r.notes}</div>
+      <div class="tierwhy"><b>Why ${r.tier}?</b> ${tierWhy(r).replace(/^(Pass|Acquire|Broker|Watch) — /,"")}</div>
+      <div class="prov">${(()=>{const p={verified:0,estimated:0,benchmark:0,unknown:0};Object.keys(MODEL).forEach(sk=>Object.keys(MODEL[sk].comps).forEach(k=>p[explain(r,sk,k).src]++));return "Data behind the scores: <b>"+p.verified+"</b> verified<span class=\"srcb verified\">✓</span> · <b>"+p.estimated+"</b> estimated<span class=\"srcb estimated\">≈</span> · <b>"+p.benchmark+"</b> benchmarks<span class=\"srcb benchmark\">◆</span> · <b>"+p.unknown+"</b> unknown (neutral)<span class=\"srcb unknown\">?</span> → confidence "+r.conf;})()}</div>
       <div class="next">${nextAction(r,r.tier,r.s)}</div>
       <div class="ai"><h4>⚡ AI modernization plan (upside score ${r.s.ai})</h4><ul>${aiRecs(r).map(x=>`<li>${x}</li>`).join("")}</ul></div>
       <div class="olog"><h4>&#128222; Outreach log</h4>
