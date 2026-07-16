@@ -47,6 +47,15 @@ Setup (one time, in Vercel → Settings → Environment Variables):
 
 Redeploy after adding the vars. Writes go through `api/outreach.js`; the passcode gates access and the service key never reaches the browser.
 
+## Enrichment (Google Places + AI website analysis)
+
+Open an unenriched business → **⚡ Enrich now**. One click runs: Google Places lookup (rating, review count, website, phone, open/closed status; match confidence via phone > ZIP > name) → fetches the website → Claude analyzes it (website score 1–5, online booking, maintenance-plan evidence, marketing & back-office gaps, succession hints from the team page) → writes everything to Supabase with a dated provenance note. Scores and tier update live; permanently-closed businesses get auto-disqualified.
+
+Extra env var needed (besides the ones above):
+- `GOOGLE_MAPS_API_KEY` — console.cloud.google.com → create project → enable **Places API (New)** → Credentials → API key (restrict to Places API) → attach billing
+
+Cost per business: ~3–4¢ Google + well under 1¢ Claude (Haiku). Top 500 ≈ $20; all 3,601 ≈ $115–130.
+
 ## Database (LIVE)
 
 The app loads live data from Supabase (project `xazmwpozsmbrqoulizyn`, tables prefixed `acq_`):
