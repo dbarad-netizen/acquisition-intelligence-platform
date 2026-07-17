@@ -716,6 +716,10 @@ async function oFetch(url,opts,retried){
 async function loadOutreach(){
   const box=el("ologList"); if(!box||!drawerLic) return;
   if(location.protocol==="file:"){ box.textContent="Outreach log works on the deployed site (needs /api/outreach)."; return; }
+  if(!localStorage.getItem("acq_pass")){
+    box.innerHTML='<button class="btn2" style="font-size:11.5px" onclick="if(getPass(true))loadOutreach()">&#128275; Enter team passcode to view &amp; log outreach</button>';
+    return;
+  }
   try{
     const r=await oFetch("/api/outreach?license="+drawerLic);
     const d=await r.json();
