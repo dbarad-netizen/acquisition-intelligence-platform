@@ -791,7 +791,7 @@ const SUPA_KEY="sb_publishable_nxpCXX6gQ8ZOWjFGdgFi3A_hcfOxoSY";
     // PostgREST caps responses at 1,000 rows — paginate until a short page
     const rows=[]; const PAGE=1000;
     for(let off=0; off<20000; off+=PAGE){
-      const r=await fetch(SUPA_URL+"/rest/v1/acq_businesses?select=name,industry,city,zip,year_established,business_type,license_number,phone,city_registered,classifications&order=license_number.asc&limit="+PAGE+"&offset="+off,
+      const r=await fetch(SUPA_URL+"/rest/v1/acq_businesses?select=name,industry,city,zip,year_established,business_type,license_number,phone,city_registered,classifications,notes,google_rating,google_review_count,website,website_score,online_booking,recurring_pct,marketing_gap,backoffice_gap,no_succession,owner_response,disqualified&order=license_number.asc&limit="+PAGE+"&offset="+off,
         {headers:{apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY}});
       if(!r.ok) throw new Error("HTTP "+r.status);
       const page=await r.json();
@@ -799,7 +799,22 @@ const SUPA_KEY="sb_publishable_nxpCXX6gQ8ZOWjFGdgFi3A_hcfOxoSY";
       if(page.length<PAGE) break;
     }
     if(!Array.isArray(rows)||rows.length===0) return;
-    const mapped=rows.map((b,i)=>expandRec([b.name,b.industry,b.city||"",b.zip||"",b.year_established,({sole:0,corp:1,other:2})[b.business_type]??2,b.license_number,b.phone||"",b.city_registered?1:0,b.classifications||""],i));
+    const mapped=rows.map((b,i)=>{
+      const m=expandRec([b.name,b.industry,b.city||"",b.zip||"",b.year_established,({sole:0,corp:1,other:2})[b.business_type]??2,b.license_number,b.phone||"",b.city_registered?1:0,b.classifications||""],i);
+      // merge enrichment + SOS data stored in the database
+      if(b.google_rating!=null)m.rating=+b.google_rating;
+      if(b.google_review_count!=null)m.reviews=b.google_review_count;
+      if(b.website_score!=null)m.web=b.website_score;
+      if(b.online_booking!=null)m.booking=b.online_booking;
+      if(b.recurring_pct!=null)m.recurring=b.recurring_pct;
+      if(b.marketing_gap!=null)m.marketingGap=b.marketing_gap;
+      if(b.backoffice_gap!=null)m.backofficeGap=b.backoffice_gap;
+      if(b.no_succession!=null)m.noSucc=b.no_succession;
+      if(b.owner_response==="replied")m.response=50; else if(b.owner_response==="interested")m.response=100;
+      if(b.disqualified)m.disq=true;
+      if(b.notes)m.notes+=" "+b.notes;
+      return m;
+    });
     DATA.length=0; mapped.forEach(m=>DATA.push(m));
     selId=null;
     document.querySelector("header .sub").textContent="Connected to Supabase · "+DATA.length+" LA County contractors · CSLB-verified · live database";
