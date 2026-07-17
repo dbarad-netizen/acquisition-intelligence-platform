@@ -188,7 +188,7 @@
         <input type="text" id="q" placeholder="Search name, city, industry…" oninput="render()">
         <select id="fInd" onchange="render()"><option value="">All industries</option></select>
         <select id="fCty" onchange="render()"><option value="">All counties</option></select>
-        <select id="fPpl" onchange="render()"><option value="">Contacts: all</option><option value="yes">&#128100; Named contact</option><option value="no">No contact yet</option></select>
+        <select id="fPpl" onchange="render()"><option value="">Signals: all</option><option value="yes">&#128100; Named contact</option><option value="no">No contact yet</option><option value="susp">&#9888; Suspended/forfeited entity</option><option value="activeent">&#10003; Active entity</option></select>
         <select id="sortBy" onchange="render()">
           <option value="quality">Sort: Quality</option>
           <option value="transition">Sort: Transition</option>
@@ -324,7 +324,7 @@ function expandRec(r,i){ return {id:i+1,name:r[0],industry:r[1],city:r[2],county
   mgmt:r[5]===0?30:(r[5]===1?55:50),custdiv:null,ownerDep:r[5]===0?75:(r[5]===1?45:55),
   finqual:null,propertyOwned:null,propYears:null,noSucc:null,noExp:null,response:0,booking:null,
   backofficeGap:null,marketingGap:null,conf:"Medium",disq:false,
-  contact:null,
+  contact:null, entityStatus:null,
   notes:"CSLB license #"+r[6]+" ("+r[9]+") issued "+r[4]+" — "+(2026-r[4])+" yrs, CLEAR status · Workers'-comp insured (has employees) · "+BT[r[5]]+(r[7]?" · "+r[7]:"")+(r[8]?" · Also holds an LA City business-tax registration":"")+" · Mgmt depth & owner dependence estimated from business type; financials unknown — enrich via Google Places, website analysis, assessor records, Data Axle."};}
 const DATA=RAW.map(expandRec);
 
@@ -414,13 +414,13 @@ function render(){
   fillSel("fCty",[...new Set(DATA.map(b=>b.county))]);
   const q=el("q").value.toLowerCase(), fi=el("fInd").value, fc=el("fCty").value, sb=el("sortBy").value;
   const fp=el("fPpl").value;
-  let list=rows.filter(r=>(!tierFilter||r.tier===tierFilter)&&(!fi||r.industry===fi)&&(!fc||r.county===fc)&&(!fp||(fp==="yes"?!!r.contact:!r.contact))
+  let list=rows.filter(r=>(!tierFilter||r.tier===tierFilter)&&(!fi||r.industry===fi)&&(!fc||r.county===fc)&&(!fp||(fp==="yes"?!!r.contact: fp==="no"?!r.contact: fp==="susp"?!!(r.entityStatus&&/Suspended|Forfeited|Terminated/i.test(r.entityStatus)): r.entityStatus==="Active"))
     &&(!q||(r.name+r.city+r.industry).toLowerCase().includes(q)));
   list.sort((a,b)=> sb==="ebitda"? b.ebitda-a.ebitda : b.s[sb]-a.s[sb]);
   const totalRows=list.length; list=list.slice(0,400);
   el("tbody").innerHTML=list.map(r=>`
     <tr class="rowb ${selId===r.id?'sel':''}" onclick="openDrawer(${r.id})">
-      <td><div class="bname">${r.name}</div><div class="bsub">${r.industry} · ${r.city}, ${r.county} Co. · ${r.years} yrs${r.contact?` · <span style="color:var(--accent2);font-weight:700">&#128100; ${r.contact.replace(/</g,"&lt;")}</span>`:""}</div></td>
+      <td><div class="bname">${r.name}</div><div class="bsub">${r.industry} · ${r.city}, ${r.county} Co. · ${r.years} yrs${r.contact?` · <span style="color:var(--accent2);font-weight:700">&#128100; ${r.contact.replace(/</g,"&lt;")}</span>`:""}${r.entityStatus&&/Suspended|Forfeited|Terminated/i.test(r.entityStatus)?` · <span style="color:#c0392b;font-weight:700">&#9888; ${r.entityStatus.replace(/</g,"&lt;")}</span>`:""}</div></td>
       <td><span class="pill ${r.tier.toLowerCase()}">${r.tier}</span></td>
       ${["quality","transition","broker","ai"].map(k=>`<td><span class="score">${r.s[k]}</span><div class="mini"><i style="width:${r.s[k]}%;background:${TIER_HEX[r.tier]}"></i></div></td>`).join("")}
       <td>${fmtE(r.ebitda)}</td>
@@ -581,7 +581,7 @@ function fillDrawer(r){
         <div class="fact"><div class="k">Owner response</div><div class="v">${r.response===100?"Interested":r.response===50?"Replied":"None yet"}</div></div>
       </div>
       <div class="notes">${r.notes}</div>
-      <div class="tierwhy"><b>Why ${r.tier}?</b> ${tierWhy(r).replace(/^(Pass|Acquire|Broker|Watch) — /,"")}</div>
+      ${r.entityStatus&&/Suspended|Forfeited|Terminated/i.test(r.entityStatus)?`<div class="tierwhy" style="background:#fdecec;border-color:#f0c5c5"><b>&#9888; Entity ${r.entityStatus.replace(/</g,"&lt;")} (CA SOS)</b> — usually unpaid franchise tax while the CSLB license stays CLEAR. Often a financial-stress or owner-disengagement signal: verify, then treat as a motivated-seller conversation starter, not an automatic pass.</div>`:""}<div class="tierwhy"><b>Why ${r.tier}?</b> ${tierWhy(r).replace(/^(Pass|Acquire|Broker|Watch) — /,"")}</div>
       <div class="prov">${(()=>{const p={verified:0,estimated:0,benchmark:0,unknown:0};Object.keys(MODEL).forEach(sk=>Object.keys(MODEL[sk].comps).forEach(k=>p[explain(r,sk,k).src]++));return "Data behind the scores: <b>"+p.verified+"</b> verified<span class=\"srcb verified\">✓</span> · <b>"+p.estimated+"</b> estimated<span class=\"srcb estimated\">≈</span> · <b>"+p.benchmark+"</b> benchmarks<span class=\"srcb benchmark\">◆</span> · <b>"+p.unknown+"</b> unknown (neutral)<span class=\"srcb unknown\">?</span> → confidence "+r.conf;})()}</div>
       ${r.lic&&(r.rating==null||r.web==null)?`<div class="enrichbar"><button class="enrichbtn" id="enrichBtn" onclick="runEnrich()">⚡ Enrich now — Google Places + AI website analysis</button><span class="emsg" id="enrichMsg">Fills reputation, website, booking &amp; marketing gaps (~5¢)</span></div>`:""}
       <div class="next">${nextAction(r,r.tier,r.s)}</div>
@@ -817,6 +817,7 @@ const SUPA_KEY="sb_publishable_nxpCXX6gQ8ZOWjFGdgFi3A_hcfOxoSY";
       if(b.disqualified)m.disq=true;
       if(b.notes)m.notes+=" "+b.notes;
       m.contact=(b.notes&&(b.notes.match(/Officers: ([^(,·]+)/)||[])[1]||"").trim()||null;
+      m.entityStatus=(b.notes&&(b.notes.match(/· status ([^·]+)/)||[])[1]||"").trim()||null;
       return m;
     });
     DATA.length=0; mapped.forEach(m=>DATA.push(m));
