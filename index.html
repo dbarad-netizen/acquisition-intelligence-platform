@@ -188,6 +188,7 @@
         <input type="text" id="q" placeholder="Search name, city, industry…" oninput="render()">
         <select id="fInd" onchange="render()"><option value="">All industries</option></select>
         <select id="fCty" onchange="render()"><option value="">All counties</option></select>
+        <select id="fPpl" onchange="render()"><option value="">Contacts: all</option><option value="yes">&#128100; Named contact</option><option value="no">No contact yet</option></select>
         <select id="sortBy" onchange="render()">
           <option value="quality">Sort: Quality</option>
           <option value="transition">Sort: Transition</option>
@@ -323,6 +324,7 @@ function expandRec(r,i){ return {id:i+1,name:r[0],industry:r[1],city:r[2],county
   mgmt:r[5]===0?30:(r[5]===1?55:50),custdiv:null,ownerDep:r[5]===0?75:(r[5]===1?45:55),
   finqual:null,propertyOwned:null,propYears:null,noSucc:null,noExp:null,response:0,booking:null,
   backofficeGap:null,marketingGap:null,conf:"Medium",disq:false,
+  contact:null,
   notes:"CSLB license #"+r[6]+" ("+r[9]+") issued "+r[4]+" — "+(2026-r[4])+" yrs, CLEAR status · Workers'-comp insured (has employees) · "+BT[r[5]]+(r[7]?" · "+r[7]:"")+(r[8]?" · Also holds an LA City business-tax registration":"")+" · Mgmt depth & owner dependence estimated from business type; financials unknown — enrich via Google Places, website analysis, assessor records, Data Axle."};}
 const DATA=RAW.map(expandRec);
 
@@ -411,13 +413,14 @@ function render(){
   fillSel("fInd",[...new Set(DATA.map(b=>b.industry))]);
   fillSel("fCty",[...new Set(DATA.map(b=>b.county))]);
   const q=el("q").value.toLowerCase(), fi=el("fInd").value, fc=el("fCty").value, sb=el("sortBy").value;
-  let list=rows.filter(r=>(!tierFilter||r.tier===tierFilter)&&(!fi||r.industry===fi)&&(!fc||r.county===fc)
+  const fp=el("fPpl").value;
+  let list=rows.filter(r=>(!tierFilter||r.tier===tierFilter)&&(!fi||r.industry===fi)&&(!fc||r.county===fc)&&(!fp||(fp==="yes"?!!r.contact:!r.contact))
     &&(!q||(r.name+r.city+r.industry).toLowerCase().includes(q)));
   list.sort((a,b)=> sb==="ebitda"? b.ebitda-a.ebitda : b.s[sb]-a.s[sb]);
   const totalRows=list.length; list=list.slice(0,400);
   el("tbody").innerHTML=list.map(r=>`
     <tr class="rowb ${selId===r.id?'sel':''}" onclick="openDrawer(${r.id})">
-      <td><div class="bname">${r.name}</div><div class="bsub">${r.industry} · ${r.city}, ${r.county} Co. · ${r.years} yrs</div></td>
+      <td><div class="bname">${r.name}</div><div class="bsub">${r.industry} · ${r.city}, ${r.county} Co. · ${r.years} yrs${r.contact?` · <span style="color:var(--accent2);font-weight:700">&#128100; ${r.contact.replace(/</g,"&lt;")}</span>`:""}</div></td>
       <td><span class="pill ${r.tier.toLowerCase()}">${r.tier}</span></td>
       ${["quality","transition","broker","ai"].map(k=>`<td><span class="score">${r.s[k]}</span><div class="mini"><i style="width:${r.s[k]}%;background:${TIER_HEX[r.tier]}"></i></div></td>`).join("")}
       <td>${fmtE(r.ebitda)}</td>
@@ -813,6 +816,7 @@ const SUPA_KEY="sb_publishable_nxpCXX6gQ8ZOWjFGdgFi3A_hcfOxoSY";
       if(b.owner_response==="replied")m.response=50; else if(b.owner_response==="interested")m.response=100;
       if(b.disqualified)m.disq=true;
       if(b.notes)m.notes+=" "+b.notes;
+      m.contact=(b.notes&&(b.notes.match(/Officers: ([^(,·]+)/)||[])[1]||"").trim()||null;
       return m;
     });
     DATA.length=0; mapped.forEach(m=>DATA.push(m));
