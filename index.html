@@ -324,27 +324,57 @@ function expandRec(r,i){ return {id:i+1,name:r[0],industry:r[1],city:r[2],county
   mgmt:r[5]===0?30:(r[5]===1?55:50),custdiv:null,ownerDep:r[5]===0?75:(r[5]===1?45:55),
   finqual:null,propertyOwned:null,propYears:null,noSucc:null,noExp:null,response:0,booking:null,
   backofficeGap:null,marketingGap:null,conf:"Medium",disq:false,
-  contact:null, entityStatus:null,
+  contact:null, entityStatus:null, psi:null,
   notes:"CSLB license #"+r[6]+" ("+r[9]+") issued "+r[4]+" — "+(2026-r[4])+" yrs, CLEAR status · Workers'-comp insured (has employees) · "+BT[r[5]]+(r[7]?" · "+r[7]:"")+(r[8]?" · Also holds an LA City business-tax registration":"")+" · Mgmt depth & owner dependence estimated from business type; financials unknown — enrich via Google Places, website analysis, assessor records, Data Axle."};}
 const DATA=RAW.map(expandRec);
 
 const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
+/* Modeled revenue/EBITDA ranges (Jon's three-model design: employee + market-presence live; permit model pending) */
+function estFin(b){
+  if(b.ebitda!=null) return null;                    // verified figures always win
+  if(!b.wc && b.emp==null) return null;
+  let lo,hi,basis;
+  if(b.emp!=null){ lo=b.emp*0.8; hi=b.emp*1.2; basis="known team size"; }
+  else{
+    if(b.btype===1){lo=4;hi=14;} else if(b.btype===2){lo=3;hi=10;} else {lo=2;hi=6;}
+    basis="business type";
+    if(b.reviews!=null){ const f=b.reviews>300?2.2:b.reviews>120?1.7:b.reviews>40?1.3:1;
+      hi*=f; lo*=Math.min(f,1.5); if(f>1) basis+=" + review volume"; }
+    if(b.web!=null&&b.web>=4){ hi*=1.3; }
+  }
+  const RPE={HVAC:[190,280],Plumbing:[180,260],Electrical:[200,300],Roofing:[170,260]}[b.industry]||[180,260];
+  const MGN={HVAC:[.08,.15],Plumbing:[.09,.16],Electrical:[.08,.14],Roofing:[.06,.13]}[b.industry]||[.08,.14];
+  let revLo=lo*RPE[0], revHi=hi*RPE[1];              // $K
+  if(b.web==null&&b.rating==null){ revHi*=0.9; }     // no market-presence evidence
+  const ebLo=Math.round(revLo*MGN[0]), ebHi=Math.round(revHi*MGN[1]);
+  return { empLo:Math.round(lo), empHi:Math.round(hi),
+    revLoK:Math.round(revLo), revHiK:Math.round(revHi),
+    ebLoK:ebLo, ebHiK:ebHi, midK:Math.round((ebLo+ebHi)/2),
+    conf:(b.reviews!=null||b.emp!=null)?"Medium":"Low", basis };
+}
 const nz=(v,d)=>v==null?d:v;
 function comps(b){
   const ind=IND[b.industry]||{growth:60,capex:60,demand:70};
-  const sweet = b.ebitda==null?50:(b.ebitda>=400&&b.ebitda<=2000?100: b.ebitda<400? clamp(b.ebitda/400*100): clamp(100-(b.ebitda-2000)/40));
+  const e=estFin(b);
+  const eb=b.ebitda!=null?b.ebitda:(e?e.midK:null);
+  const sweet = eb==null?50:(eb>=400&&eb<=2000?100: eb<400? clamp(eb/400*100): clamp(100-(eb-2000)/40));
+  const revM = b.rev!=null?b.rev:(e?(e.revLoK+e.revHiK)/2000:null);
+  const empM = b.emp!=null?b.emp:(e?(e.empLo+e.empHi)/2:null);
+  const psiGap = b.psi!=null?(b.psi<30?85:b.psi<60?60:b.psi<80?35:15):null;
+  const webGapBase = b.web!=null?clamp((5-b.web)/4*100):null;
   return {
-    quality:{ revenue:b.rev==null?40:clamp((b.rev-0.5)/9.5*100), recurring:b.recurring==null?40:clamp(b.recurring*1.15), mgmt:nz(b.mgmt,50),
-      employees:b.emp==null?(b.wc?55:25):clamp(b.emp/50*100), years:clamp(b.years/25*100), custdiv:nz(b.custdiv,50),
+    quality:{ revenue:revM==null?40:clamp((revM-0.5)/9.5*100), recurring:b.recurring==null?40:clamp(b.recurring*1.15), mgmt:nz(b.mgmt,50),
+      employees:empM==null?(b.wc?55:25):clamp(empM/50*100), years:clamp(b.years/25*100), custdiv:nz(b.custdiv,50),
       reputation:b.rating==null?45:clamp((b.rating-3)/2*70)+clamp(nz(b.reviews,0)/300*30,0,30), growth:ind.growth, capex:ind.capex,
-      finance:b.ebitda==null?50:clamp(100-Math.abs(b.ebitda-1200)/1200*60)*(nz(b.finqual,50)>=50?1:.7) },
+      finance:eb==null?50:clamp(100-Math.abs(eb-1200)/1200*60)*(nz(b.finqual,50)>=50?1:.7) },
     transition:{ tenure:clamp(nz(b.tenure,b.years)/30*100), response:nz(b.response,0), licAge:clamp(b.years/25*100),
       noSucc:b.noSucc==null?55:(b.noSucc?100:10), mgmtRun:nz(b.mgmt,50),
       propTen:b.propertyOwned==null?(b.mailingDiff?55:40):(b.propertyOwned?clamp(nz(b.propYears,0)/20*100):20),
       noExp:b.noExp==null?50:(b.noExp?85:20) },
     broker:{ transfer:100-nz(b.ownerDep,50), finqual:nz(b.finqual,45), demand:ind.demand, size:sweet,
       realestate:b.propertyOwned==null?50:(b.propertyOwned?90:55), clean:b.disq?0:95 },
-    ai:{ webgap:b.web==null?65:clamp((5-b.web)/4*100), callgap:b.booking==null?65:(b.booking?30:85), backoffice:nz(b.backofficeGap,65),
+    ai:{ webgap:(webGapBase!=null&&psiGap!=null)?(webGapBase+psiGap)/2:(webGapBase??psiGap??65),
+      callgap:b.booking==null?65:(b.booking?30:85), backoffice:nz(b.backofficeGap,65),
       marketing:nz(b.marketingGap,65), recurconv:b.recurring==null?65:clamp(100-b.recurring), datagap:nz(b.backofficeGap,65) },
   };
 }
@@ -357,7 +387,8 @@ function score(b,key){
 function tierOf(b,s){
   const thQ=+el("thQ").value, thT=+el("thT").value, e1=+el("thE1").value, e2=+el("thE2").value;
   if(b.disq || (s.quality<45 && b.conf!=="Low")) return "Pass"; // unenriched records never Pass on imputed data
-  const inBox = BUYBOX_IND.has(b.industry) && b.ebitda!=null && b.ebitda>=e1 && b.ebitda<=e2;
+  const _e=estFin(b); const _eb=b.ebitda!=null?b.ebitda:(_e?_e.midK:null);
+  const inBox = BUYBOX_IND.has(b.industry) && _eb!=null && _eb>=e1 && _eb<=e2;
   if(s.quality>=thQ && s.transition>=thT && inBox) return "Acquire";
   if(s.transition>=thT && s.broker>=55) return "Broker";
   return "Watch";
@@ -394,7 +425,7 @@ let tierFilter="", selId=null;
 
 function computeAll(){
   return DATA.map(b=>{ const s={quality:score(b,"quality"),transition:score(b,"transition"),broker:score(b,"broker"),ai:score(b,"ai")};
-    return {...b,s,tier:tierOf(b,s)}; });
+    return {...b,s,est:estFin(b),tier:tierOf(b,s)}; });
 }
 function render(){
   ["Q","T","E1","E2"].forEach(k=>el("v"+k).textContent=el("th"+k).value);
@@ -423,7 +454,7 @@ function render(){
       <td><div class="bname">${r.name}</div><div class="bsub">${r.industry} · ${r.city}, ${r.county} Co. · ${r.years} yrs${r.contact?` · <span style="color:var(--accent2);font-weight:700">&#128100; ${r.contact.replace(/</g,"&lt;")}</span>`:""}${r.entityStatus&&/Suspended|Forfeited|Terminated/i.test(r.entityStatus)?` · <span style="color:#c0392b;font-weight:700">&#9888; ${r.entityStatus.replace(/</g,"&lt;")}</span>`:""}</div></td>
       <td><span class="pill ${r.tier.toLowerCase()}">${r.tier}</span></td>
       ${["quality","transition","broker","ai"].map(k=>`<td><span class="score">${r.s[k]}</span><div class="mini"><i style="width:${r.s[k]}%;background:${TIER_HEX[r.tier]}"></i></div></td>`).join("")}
-      <td>${fmtE(r.ebitda)}</td>
+      <td>${r.ebitda!=null?fmtE(r.ebitda):(r.est?`<span title="modeled ${fmtE(r.est.ebLoK)}–${fmtE(r.est.ebHiK)}">≈${fmtE(r.est.midK)}</span>`:"—")}</td>
       <td><span class="conf ${r.conf}">${r.conf}</span></td>
     </tr>`).join("")+(totalRows>400?`<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:12px;font-size:12px">Showing top 400 of ${totalRows} matches — narrow filters or search to see the rest</td></tr>`:"") || `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px">No businesses match.</td></tr>`;
   drawScatter(rows);
@@ -478,24 +509,27 @@ const SRCL={verified:"✓",estimated:"≈",benchmark:"◆",unknown:"?"};
 const SRCN={verified:"verified public record",estimated:"heuristic estimate",benchmark:"industry benchmark",unknown:"unknown — neutral placeholder"};
 function explain(b,key,k){
   const V=w=>({src:"verified",why:w}), E=w=>({src:"estimated",why:w}), U=w=>({src:"unknown",why:w}), B=w=>({src:"benchmark",why:w});
-  const bt=BT[b.btype]||"business", yrs=b.years;
+  const bt=BT[b.btype]||"business", yrs=b.years, e=(b.est!==undefined?b.est:estFin(b));
   const M={
-  "quality.revenue": ()=> b.rev==null? U("Private-company revenue isn't public. Held at neutral-low 40 until enriched — Data Axle estimate, permit volumes, or the owner tells you.")
-    : V("Revenue estimate $"+b.rev+"M scaled across the $0.5–10M target range."),
+  "quality.revenue": ()=> b.rev!=null? V("Revenue estimate $"+b.rev+"M scaled across the $0.5–10M target range.")
+    : e? E("Modeled ≈$"+(e.revLoK/1000).toFixed(1)+"–"+(e.revHiK/1000).toFixed(1)+"M: estimated headcount ("+e.basis+") × industry revenue-per-employee, market-presence adjusted. Two of three planned models live (permit-volume model pending). Verify in conversation.")
+    : U("Private-company revenue isn't public and can't be modeled yet. Neutral-low 40."),
   "quality.recurring": ()=> b.recurring==null? U("Recurring-revenue mix unknown. Website analysis (maintenance-plan pages) or a conversation fills this. Neutral 40.")
     : V("Recurring revenue "+b.recurring+"% (×1.15 scaling)."),
   "quality.mgmt": ()=> b.btype!=null? E("No org-chart data yet — estimated from CSLB business type ("+bt+"). Sole owners rarely have a management layer; corporations usually have some. LinkedIn research refines this.")
     : (b.mgmt==null? U("Management depth unknown. Neutral 50."):V("From research: "+b.mgmt+"/100.")),
-  "quality.employees": ()=> b.emp==null? (b.wc? E("CSLB shows active workers'-comp insurance — verified proof that employees exist, but not how many. Set to 55; LinkedIn or website headcount refines it.")
-    : U("No employee evidence. Low 25.")) : V(b.emp+" employees (scaled: 50+ = 100)."),
+  "quality.employees": ()=> b.emp!=null? V(b.emp+" employees (scaled: 50+ = 100).")
+    : e? E("Modeled ≈"+e.empLo+"–"+e.empHi+" employees from "+e.basis+". Workers'-comp on file (verified) proves ≥1; LinkedIn or website team page refines.")
+    : (b.wc? E("Workers'-comp proves employees exist, size unknown → 55.") : U("No employee evidence. Low 25.")),
   "quality.years": ()=> V("CSLB license issued "+b.startYear+" → "+yrs+" years in business (verified). Scale caps at 25 yrs = 100."),
   "quality.custdiv": ()=> b.custdiv==null? U("Customer concentration can't be seen in public data — it comes from the owner conversation. Neutral 50."):V("From research: "+b.custdiv+"/100."),
   "quality.reputation": ()=> b.rating==null? U("No Google rating loaded yet — the Places enrichment pass fills this for ~2¢/record. Neutral 45.")
     : V("Google "+b.rating+"★ across "+b.reviews+" reviews (rating worth 70 pts, review volume 30)."),
   "quality.growth": ()=> B("Industry benchmark for "+b.industry+" demand growth (fixed table — editable via Scoring weights)."),
   "quality.capex": ()=> B("Industry benchmark: how capital-light "+b.industry+" businesses typically are."),
-  "quality.finance": ()=> b.ebitda==null? U("SBA financeability turns on EBITDA, which is unknown. Neutral 50.")
-    : V("Distance of EBITDA ("+fmtE(b.ebitda)+") from the ~$1.2M sweet spot."),
+  "quality.finance": ()=> b.ebitda!=null? V("Distance of EBITDA ("+fmtE(b.ebitda)+") from the ~$1.2M sweet spot.")
+    : e? E("Uses modeled EBITDA midpoint "+fmtE(e.midK)+" (range "+fmtE(e.ebLoK)+"–"+fmtE(e.ebHiK)+", industry margin band, "+e.conf+" confidence).")
+    : U("SBA financeability turns on EBITDA, which can't be modeled yet. Neutral 50."),
   "transition.tenure": ()=> E("Proxy: license age ("+yrs+" yrs). Assumes the original owner still runs it — a very old license may actually mean second generation. Verify via LinkedIn, website team page, or the first call."),
   "transition.response": ()=> b.response===0? V("No owner contact yet — from your outreach log. This is 20% of the score; a single logged conversation moves this record more than any data purchase.")
     : V("From your outreach log: owner "+(b.response===100?"expressed interest":"replied")+"."),
@@ -512,13 +546,14 @@ function explain(b,key,k){
   "broker.finqual": ()=> b.finqual==null? U("Quality of the books is unknown until financials are shared. Neutral-low 45 — most small trades run messy books.")
     : V("From review of financials: "+b.finqual+"/100."),
   "broker.demand": ()=> B("Buyer-demand benchmark for "+b.industry+" — PE platforms and strategics are highly active in the licensed trades."),
-  "broker.size": ()=> b.ebitda==null? U("Size sweet spot needs EBITDA (buyers cluster at $400K–$2M). Neutral 50.")
-    : V("EBITDA "+fmtE(b.ebitda)+" vs the $400K–$2M sweet spot."),
+  "broker.size": ()=> b.ebitda!=null? V("EBITDA "+fmtE(b.ebitda)+" vs the $400K–$2M sweet spot.")
+    : e? E("Modeled EBITDA midpoint "+fmtE(e.midK)+" vs the $400K–$2M buyer sweet spot (range "+fmtE(e.ebLoK)+"–"+fmtE(e.ebHiK)+").")
+    : U("Size sweet spot needs EBITDA, which can't be modeled yet. Neutral 50."),
   "broker.realestate": ()=> b.propertyOwned==null? U("Unknown — assessor lookup fills this. Owned real estate adds deal options (sale-leaseback, second commission). Neutral 50.")
     : V(b.propertyOwned?"Owner-occupied real estate confirmed — adds deal flexibility.":"Leased premises."),
   "broker.clean": ()=> V("CSLB status CLEAR, bond and workers'-comp current, no disciplinary flags found → 95 (verified)."),
-  "ai.webgap": ()=> b.web==null? U("Website not assessed yet — the LLM website-analysis pass scores it 1–5. Held at 65: most 15+ yr trade businesses skew dated, which is upside.")
-    : V("Website scored "+b.web+"/5 — the worse the site, the bigger the modernization gain."),
+  "ai.webgap": ()=> (b.web!=null||b.psi!=null)? V([b.web!=null?"site "+b.web+"/5 (AI review)":null,b.psi!=null?"PageSpeed mobile "+b.psi+"/100 (measured)":null].filter(Boolean).join(" + ")+" — the weaker the web presence, the bigger the modernization gain.")
+    : U("Website not assessed yet — LLM analysis + PageSpeed fill this. Held at 65: most 15+ yr trade businesses skew dated, which is upside."),
   "ai.callgap": ()=> b.booking==null? U("Online booking presence unknown until the website pass. Held at 65.")
     : V(b.booking?"Online booking exists — smaller gap (30).":"No online booking — AI phone/scheduling typically recovers 10–20% of missed demand (85)."),
   "ai.backoffice": ()=> b.backofficeGap==null? U("Back-office stack unknown — assessed from website tech signals and the first conversation. Held at 65.")
@@ -534,15 +569,19 @@ function explain(b,key,k){
 }
 function tierWhy(r){
   const thQ=+el("thQ").value, thT=+el("thT").value, e1=+el("thE1").value, e2=+el("thE2").value, s=r.s;
+  const est=r.est!==undefined?r.est:estFin(r);
+  const eb=r.ebitda!=null?r.ebitda:(est?est.midK:null);
+  const ebLbl=r.ebitda!=null?fmtE(r.ebitda):(est?"≈"+fmtE(est.midK)+" (modeled "+fmtE(est.ebLoK)+"–"+fmtE(est.ebHiK)+")":null);
   if(r.disq) return "Pass — a disqualifying flag is on the record (license/legal issue).";
   if(s.quality<45&&r.conf!=="Low") return "Pass — quality "+s.quality+" is below the 45 floor, with enough data confidence to act on it.";
-  const inBox=BUYBOX_IND.has(r.industry)&&r.ebitda!=null&&r.ebitda>=e1&&r.ebitda<=e2;
-  if(s.quality>=thQ&&s.transition>=thT&&inBox) return "Acquire — quality "+s.quality+" ≥ "+thQ+", transition "+s.transition+" ≥ "+thT+", and EBITDA sits inside the buy-box ("+fmtE(e1)+"–"+fmtE(e2)+").";
-  if(s.transition>=thT&&s.broker>=55) return "Broker — transition "+s.transition+" clears the "+thT+" threshold and brokerage fit is "+s.broker+", but "+(r.ebitda==null?"EBITDA is unknown, so it can't be tested against the Acquire buy-box yet. An owner conversation or Data Axle estimate could move this to Acquire":"it doesn't meet the Acquire criteria")+".";
+  const inBox=BUYBOX_IND.has(r.industry)&&eb!=null&&eb>=e1&&eb<=e2;
+  if(s.quality>=thQ&&s.transition>=thT&&inBox) return "Acquire — quality "+s.quality+" ≥ "+thQ+", transition "+s.transition+" ≥ "+thT+", and EBITDA "+ebLbl+" sits inside the buy-box ("+fmtE(e1)+"–"+fmtE(e2)+")."+(r.ebitda==null?" The EBITDA is a modeled estimate — verify with the owner before acting.":"");
+  if(s.transition>=thT&&s.broker>=55) return "Broker — transition "+s.transition+" clears "+thT+" and brokerage fit is "+s.broker+", but "+(eb==null?"EBITDA can't be estimated yet":( !inBox? "EBITDA "+ebLbl+" falls outside the Acquire buy-box":"quality "+s.quality+" is below the "+thQ+" Acquire bar"))+".";
   const miss=[];
   if(s.transition<thT) miss.push("transition "+s.transition+" is below "+thT+" — no owner response yet is the biggest drag (worth "+MODEL.transition.comps.response.w+"% of the score)");
   if(s.quality<thQ) miss.push("quality "+s.quality+" is below the "+thQ+" Acquire bar");
-  if(r.ebitda==null) miss.push("EBITDA is unknown, so the buy-box can't be tested");
+  if(eb==null) miss.push("EBITDA can't be modeled yet (needs headcount or review signals)");
+  else if(!inBox) miss.push("EBITDA "+ebLbl+" sits outside the buy-box");
   if(s.transition>=thT&&s.broker<55) miss.push("brokerage fit "+s.broker+" is below 55");
   return "Watch — "+(miss.length?miss.join("; "):"signals are middling")+". Enrichment or a logged owner conversation is what promotes it.";
 }
@@ -570,14 +609,15 @@ function fillDrawer(r){
     </div>
     <div class="dbody">
       <div class="facts">
-        <div class="fact"><div class="k">Revenue (est.)</div><div class="v">${r.rev==null?"—":"$"+r.rev.toFixed(1)+"M"}</div></div>
-        <div class="fact"><div class="k">EBITDA (est.)</div><div class="v">${fmtE(r.ebitda)}</div></div>
-        <div class="fact"><div class="k">Employees</div><div class="v">${r.emp==null?"—":r.emp}</div></div>
+        <div class="fact"><div class="k">Revenue</div><div class="v">${r.rev!=null?"$"+r.rev.toFixed(1)+"M":(r.est?"≈$"+(r.est.revLoK/1000).toFixed(1)+"–"+(r.est.revHiK/1000).toFixed(1)+"M":"—")}</div></div>
+        <div class="fact"><div class="k">EBITDA</div><div class="v">${r.ebitda!=null?fmtE(r.ebitda):(r.est?"≈"+fmtE(r.est.ebLoK)+"–"+fmtE(r.est.ebHiK):"—")}</div></div>
+        <div class="fact"><div class="k">Employees</div><div class="v">${r.emp!=null?r.emp:(r.est?"≈"+r.est.empLo+"–"+r.est.empHi:"—")}</div></div>
         <div class="fact"><div class="k">Years / owner tenure</div><div class="v">${r.years} / ${r.tenure==null?"?":r.tenure}</div></div>
         <div class="fact"><div class="k">Google</div><div class="v">${r.rating==null?"—":r.rating+"★ · "+r.reviews}</div></div>
         <div class="fact"><div class="k">Property</div><div class="v">${r.propertyOwned==null?"Unknown":(r.propertyOwned?"Owned "+r.propYears+" yrs":"Leased")}</div></div>
         <div class="fact"><div class="k">Recurring revenue</div><div class="v">${r.recurring==null?"—":r.recurring+"%"}</div></div>
         <div class="fact"><div class="k">Website score</div><div class="v">${r.web==null?"—":r.web+" / 5"}</div></div>
+        <div class="fact"><div class="k">PageSpeed mobile</div><div class="v">${r.psi==null?"—":r.psi+" / 100"}</div></div>
         <div class="fact"><div class="k">Owner response</div><div class="v">${r.response===100?"Interested":r.response===50?"Replied":"None yet"}</div></div>
       </div>
       <div class="notes">${r.notes}</div>
@@ -779,6 +819,7 @@ async function runEnrich(){
       if(f.marketingGap!=null)rec.marketingGap=f.marketingGap;
       if(f.backofficeGap!=null)rec.backofficeGap=f.backofficeGap;
       if(f.noSucc!=null)rec.noSucc=f.noSucc;
+      if(f.psi!=null)rec.psi=f.psi;
       if(f.disq)rec.disq=true;
       rec.notes+=" || Enriched just now: "+(d.report||[]).join(" | ");
     }
@@ -794,7 +835,7 @@ const SUPA_KEY="sb_publishable_nxpCXX6gQ8ZOWjFGdgFi3A_hcfOxoSY";
     // PostgREST caps responses at 1,000 rows — paginate until a short page
     const rows=[]; const PAGE=1000;
     for(let off=0; off<20000; off+=PAGE){
-      const r=await fetch(SUPA_URL+"/rest/v1/acq_businesses?select=name,industry,city,zip,year_established,business_type,license_number,phone,city_registered,classifications,notes,google_rating,google_review_count,website,website_score,online_booking,recurring_pct,marketing_gap,backoffice_gap,no_succession,owner_response,disqualified&order=license_number.asc&limit="+PAGE+"&offset="+off,
+      const r=await fetch(SUPA_URL+"/rest/v1/acq_businesses?select=name,industry,city,zip,year_established,business_type,license_number,phone,city_registered,classifications,notes,google_rating,google_review_count,website,website_score,online_booking,recurring_pct,marketing_gap,backoffice_gap,no_succession,owner_response,disqualified,pagespeed_mobile&order=license_number.asc&limit="+PAGE+"&offset="+off,
         {headers:{apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY}});
       if(!r.ok) throw new Error("HTTP "+r.status);
       const page=await r.json();
@@ -815,6 +856,7 @@ const SUPA_KEY="sb_publishable_nxpCXX6gQ8ZOWjFGdgFi3A_hcfOxoSY";
       if(b.no_succession!=null)m.noSucc=b.no_succession;
       if(b.owner_response==="replied")m.response=50; else if(b.owner_response==="interested")m.response=100;
       if(b.disqualified)m.disq=true;
+      if(b.pagespeed_mobile!=null)m.psi=b.pagespeed_mobile;
       if(b.notes)m.notes+=" "+b.notes;
       m.contact=(b.notes&&(b.notes.match(/Officers: ([^(,·]+)/)||[])[1]||"").trim()||null;
       m.entityStatus=(b.notes&&(b.notes.match(/· status ([^·]+)/)||[])[1]||"").trim()||null;

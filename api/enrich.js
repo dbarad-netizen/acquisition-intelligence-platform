@@ -120,6 +120,21 @@ export default async function handler(req, res) {
       report.push("No website on Google profile → website score 1/5 (maximum modernization gap).");
     }
 
+    // 4b) PageSpeed Insights — free, objective website quality (enable "PageSpeed Insights API" in the same Google project)
+    if (patch.website) {
+      try {
+        const c2 = new AbortController(); const t2 = setTimeout(() => c2.abort(), 25000);
+        const pr = await fetch("https://www.googleapis.com/pagespeedonline/runPagespeed?strategy=mobile&category=PERFORMANCE&url=" + encodeURIComponent(patch.website) + "&key=" + gkey, { signal: c2.signal });
+        clearTimeout(t2);
+        const pdta = await pr.json();
+        const score = pdta?.lighthouseResult?.categories?.performance?.score;
+        if (score != null) {
+          patch.pagespeed_mobile = Math.round(score * 100);
+          report.push("PageSpeed mobile: " + patch.pagespeed_mobile + "/100" + (patch.pagespeed_mobile < 60 ? " — weak measured performance (modernization upside)" : ""));
+        }
+      } catch (e) { report.push("PageSpeed check skipped (" + e.message + ")"); }
+    }
+
     // 5) write back (append provenance to notes, never overwrite them)
     if (Object.keys(patch).length) {
       patch.notes = (biz.notes || "") + " || Enriched " + new Date().toISOString().slice(0, 10) + " (Google Places + AI website analysis): " + report.join(" | ");
@@ -135,6 +150,7 @@ export default async function handler(req, res) {
         booking: patch.online_booking ?? null, recurring: patch.recurring_pct ?? null,
         marketingGap: patch.marketing_gap ?? null, backofficeGap: patch.backoffice_gap ?? null,
         noSucc: patch.no_succession ?? null, disq: patch.disqualified ?? false,
+        psi: patch.pagespeed_mobile ?? null,
       },
     });
   } catch (e) {

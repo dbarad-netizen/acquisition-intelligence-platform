@@ -56,6 +56,12 @@ Extra env var needed (besides the ones above):
 
 Cost per business: ~3–4¢ Google + well under 1¢ Claude (Haiku). Top 500 ≈ $20; all 3,601 ≈ $115–130.
 
+Enrichment also runs **PageSpeed Insights** (free — enable "PageSpeed Insights API" in the same Google Cloud project as Places) for an objective mobile-performance score that feeds the AI Modernization Upside score.
+
+## Modeled revenue & EBITDA ranges
+
+When verified financials are absent, the app computes a modeled range per business (employee model × industry revenue-per-employee, adjusted by market presence — review volume, website quality; permit-volume model planned). Shown everywhere with ≈ and a low–high range, marked "estimated" in the score explainer, and never overwriting verified data. The modeled EBITDA midpoint drives buy-box testing, which is what lets records reach the Acquire tier before paid data — the tier explanation always discloses when the figure is modeled. Enrichment (reviews, website) narrows the ranges automatically.
+
 ## Database (LIVE)
 
 The app loads live data from Supabase (project `xazmwpozsmbrqoulizyn`, tables prefixed `acq_`):
